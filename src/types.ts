@@ -15,3 +15,8 @@ export interface DateRange {
   start: string;
   end: string;
 }
+
+export interface Budget {
+  category: string;
+  allocation: number;
+}
