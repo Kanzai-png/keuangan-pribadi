@@ -3,7 +3,9 @@ export interface Transaction {
   date: string;
   category: string;
   description: string;
-  amount: number;
+  quantity: number;
+  price: number;
+  total: number;
   type: 'masuk' | 'keluar';
 }
 

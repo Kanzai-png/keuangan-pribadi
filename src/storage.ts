@@ -4,7 +4,6 @@ const REPO = 'Kanzai-png/keuangan-pribadi';
 const FILE_PATH = 'data/transactions.json';
 const BRANCH = 'master';
 
-// GitHub PAT - loaded from env or hardcoded for now
 let githubToken = '';
 
 export function setGithubToken(token: string) {
@@ -22,7 +21,6 @@ export function getGithubToken(): string {
 async function getFileSha(): Promise<string | null> {
   const token = getGithubToken();
   if (!token) return null;
-
   try {
     const res = await fetch(
       `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}`,
@@ -39,7 +37,6 @@ async function getFileSha(): Promise<string | null> {
 export async function loadFromGithub(): Promise<Transaction[]> {
   const token = getGithubToken();
   if (!token) return loadFromLocal();
-
   try {
     const res = await fetch(
       `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}`,
@@ -62,17 +59,14 @@ export async function saveToGithub(transactions: Transaction[]): Promise<boolean
     saveToLocal(transactions);
     return false;
   }
-
   const content = btoa(unescape(encodeURIComponent(JSON.stringify(transactions, null, 2))));
   const sha = await getFileSha();
-
   const body: Record<string, string> = {
     message: `update transactions ${new Date().toISOString().split('T')[0]}`,
     content,
     branch: BRANCH,
   };
   if (sha) body.sha = sha;
-
   try {
     const res = await fetch(
       `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`,
@@ -90,7 +84,6 @@ export async function saveToGithub(transactions: Transaction[]): Promise<boolean
       return true;
     }
   } catch {}
-
   saveToLocal(transactions);
   return false;
 }
@@ -107,7 +100,6 @@ export function saveToLocal(transactions: Transaction[]): void {
 export function filterByPeriod(transactions: Transaction[], period: string): Transaction[] {
   const now = new Date();
   let startDate: Date;
-
   switch (period) {
     case '1w':
       startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -121,7 +113,6 @@ export function filterByPeriod(transactions: Transaction[], period: string): Tra
     default:
       return transactions;
   }
-
   return transactions.filter(t => new Date(t.date) >= startDate);
 }
 
