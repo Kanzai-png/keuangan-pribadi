@@ -8,6 +8,7 @@ import { supabase } from './supabase';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import Report from './Report';
+import Account from './Account';
 
 interface Alert {
   id: string;
@@ -19,7 +20,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [period, setPeriod] = useState<Period>('all');
   const [customRange, setCustomRange] = useState<DateRange>({ start: '', end: '' });
-  const [activePage, setActivePage] = useState<'dashboard' | 'report'>('dashboard');
+  const [activePage, setActivePage] = useState<'dashboard' | 'report' | 'account'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,7 +196,7 @@ export default function App() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <div>
-                <h2 className="text-lg font-semibold text-white">{activePage === 'dashboard' ? 'Dashboard' : 'Cetak Laporan'}</h2>
+                <h2 className="text-lg font-semibold text-white">{activePage === 'dashboard' ? 'Dashboard' : activePage === 'report' ? 'Cetak Laporan' : 'Akun'}</h2>
                 <p className="text-xs text-gray-400">{user.email}</p>
               </div>
             </div>
@@ -222,7 +223,7 @@ export default function App() {
               onDelete={handleDelete}
               notify={notify}
             />
-          ) : (
+          ) : activePage === 'report' ? (
             <Report
               transactions={transactions}
               period={period}
@@ -231,6 +232,8 @@ export default function App() {
               setCustomRange={setCustomRange}
               notify={notify}
             />
+          ) : (
+            <Account user={user} notify={notify} />
           )}
         </main>
       </div>

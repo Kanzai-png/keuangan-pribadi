@@ -1,8 +1,8 @@
 // Sidebar component
 
 interface SidebarProps {
-  activePage: 'dashboard' | 'report';
-  setActivePage: (page: 'dashboard' | 'report') => void;
+  activePage: 'dashboard' | 'report' | 'account';
+  setActivePage: (page: 'dashboard' | 'report' | 'account') => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
 }
