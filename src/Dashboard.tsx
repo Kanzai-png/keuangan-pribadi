@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod, generateId } from './storage';
-import Papa from 'papaparse';
 import {
   Chart as ChartJS, CategoryScale, LinearScale,
   BarElement, ArcElement, Title, Tooltip, Legend
@@ -29,7 +28,6 @@ interface DashboardProps {
 export default function Dashboard({ transactions, period, customRange, setPeriod, setCustomRange, onAdd, onEdit, onDelete, notify }: DashboardProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [showChart, setShowChart] = useState(true);
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     category: '',
@@ -42,6 +40,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
   const filtered = filterByPeriod(transactions, period, customRange);
   const totalMasuk = filtered.filter(t => t.type === 'masuk').reduce((s, t) => s + t.total, 0);
   const totalKeluar = filtered.filter(t => t.type === 'keluar').reduce((s, t) => s + t.total, 0);
+  const saldo = totalMasuk - totalKeluar;
   const totalItems = filtered.reduce((s, t) => s + t.quantity, 0);
 
   const periods: { key: Period; label: string }[] = [
@@ -53,18 +52,37 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     { key: 'all', label: 'Semua' },
   ];
 
-  // Chart data
-  const barChartData = (() => {
-    const days: Record<string, { masuk: number; keluar: number }> = {};
+  // Category breakdown (allocation = total per category, realization = actual spending)
+  const categoryBreakdown = (() => {
+    const cats: Record<string, { allocation: number; realization: number }> = {};
+    // Allocation = sum of all transactions per category (budget plan)
+    // Realization = actual spending (keluar only)
     filtered.forEach(t => {
-      if (!days[t.date]) days[t.date] = { masuk: 0, keluar: 0 };
-      days[t.date][t.type] += t.total;
+      if (!cats[t.category]) cats[t.category] = { allocation: 0, realization: 0 };
+      if (t.type === 'keluar') {
+        cats[t.category].realization += t.total;
+        cats[t.category].allocation += t.total; // default allocation = realization until user sets budget
+      } else {
+        cats[t.category].allocation += t.total;
+      }
     });
-    const labels = Object.keys(days).sort();
-    return { labels, days };
+    return cats;
   })();
 
-  const categoryData = (() => {
+  // Monthly trend data
+  const monthlyTrend = (() => {
+    const months: Record<string, { masuk: number; keluar: number }> = {};
+    filtered.forEach(t => {
+      const month = t.date.slice(0, 7); // YYYY-MM
+      if (!months[month]) months[month] = { masuk: 0, keluar: 0 };
+      months[month][t.type] += t.total;
+    });
+    const labels = Object.keys(months).sort();
+    return { labels, months };
+  })();
+
+  // Doughnut data
+  const doughnutCats = (() => {
     const cats: Record<string, number> = {};
     filtered.filter(t => t.type === 'keluar').forEach(t => {
       cats[t.category] = (cats[t.category] || 0) + t.total;
@@ -73,18 +91,22 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
   })();
 
   const barData = {
-    labels: barChartData.labels.map(d => d.slice(5)),
+    labels: monthlyTrend.labels.map(m => {
+      const [y, mo] = m.split('-');
+      const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+      return months[parseInt(mo) - 1] + ' ' + y.slice(2);
+    }),
     datasets: [
-      { label: 'Masuk', data: barChartData.labels.map(d => barChartData.days[d].masuk), backgroundColor: '#14b8a6' },
-      { label: 'Keluar', data: barChartData.labels.map(d => barChartData.days[d].keluar), backgroundColor: '#ef4444' },
+      { label: 'Masuk', data: monthlyTrend.labels.map(m => monthlyTrend.months[m].masuk), backgroundColor: '#14b8a6' },
+      { label: 'Keluar', data: monthlyTrend.labels.map(m => monthlyTrend.months[m].keluar), backgroundColor: '#ef4444' },
     ],
   };
 
-  const doughnutLabels = Object.keys(categoryData);
+  const doughnutLabels = Object.keys(doughnutCats);
   const colors = ['#14b8a6', '#f59e0b', '#ef4444', '#6366f1', '#06b6d4', '#ec4899', '#8b5cf6', '#22c55e', '#f97316', '#a855f7'];
   const doughnutData = {
     labels: doughnutLabels,
-    datasets: [{ data: doughnutLabels.map(l => categoryData[l]), backgroundColor: colors.slice(0, doughnutLabels.length) }],
+    datasets: [{ data: doughnutLabels.map(l => doughnutCats[l]), backgroundColor: colors.slice(0, doughnutLabels.length) }],
   };
 
   function handleSubmit(e: React.FormEvent) {
@@ -118,65 +140,76 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     notify('success', 'Transaksi dihapus');
   }
 
+  function getStatus(usage: number): string {
+    if (usage === 0) return 'Safe';
+    if (usage < 70) return 'Normal';
+    if (usage <= 100) return 'Warning';
+    return 'Over Budget';
+  }
+
   function handleExportCSV() {
-    // Section 1: Transactions
-    const txData = filtered.map(t => ({
-      Tanggal: t.date,
-      Kategori: t.category,
-      Deskripsi: t.description,
-      Qty: t.quantity,
-      'Harga Satuan': t.price,
-      Total: t.total,
-      Tipe: t.type,
-    }));
+    const now = new Date();
+    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    const filename = `money-management-report-${now.getFullYear()}-${monthNames[now.getMonth()]}.csv`;
 
-    // Section 2: Summary
-    const summaryRows = [
-      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-      { Tanggal: '=== RINGKASAN ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-      { Tanggal: 'Total Masuk', Kategori: '', Deskripsi: '', Qty: totalItems, 'Harga Satuan': '', Total: totalMasuk, Tipe: '' },
-      { Tanggal: 'Total Keluar', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: totalKeluar, Tipe: '' },
-      { Tanggal: 'Saldo', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: totalMasuk - totalKeluar, Tipe: '' },
-      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-      { Tanggal: '=== CHART: Masuk vs Keluar per Hari ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-    ];
+    let csv = '\ufeff'; // UTF-8 BOM
 
-    // Section 3: Bar chart data
-    const barRows = barChartData.labels.map(d => ({
-      Tanggal: d,
-      Kategori: '',
-      Deskripsi: '',
-      Qty: '',
-      'Harga Satuan': barChartData.days[d].masuk,
-      Total: barChartData.days[d].keluar,
-      Tipe: '',
-    }));
+    // Section 1: Summary
+    csv += 'MONEY MANAGEMENT REPORT\n';
+    csv += `Period,${period === 'custom' ? customRange.start + ' to ' + customRange.end : period}\n`;
+    csv += `Generated,${now.toISOString().split('T')[0]}\n`;
+    csv += '\n';
+    csv += 'SUMMARY\n';
+    csv += `Total Income,${totalMasuk}\n`;
+    csv += `Total Spending,${totalKeluar}\n`;
+    csv += `Balance,${saldo}\n`;
+    csv += `Total Items,${totalItems}\n`;
+    csv += '\n';
 
-    // Section 4: Category breakdown
-    const catHeader = [
-      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-      { Tanggal: '=== CHART: Pengeluaran per Kategori ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
-    ];
-    const catRows = doughnutLabels.map(cat => ({
-      Tanggal: cat,
-      Kategori: '',
-      Deskripsi: '',
-      Qty: '',
-      'Harga Satuan': '',
-      Total: categoryData[cat],
-      Tipe: Math.round((categoryData[cat] / totalKeluar) * 100) + '%',
-    }));
+    // Section 2: Expenses Dashboard (Category, Allocation, Realization, UsagePercent, Status)
+    csv += 'EXPENSES DASHBOARD\n';
+    csv += 'Category,Allocation,Realization,UsagePercent,Status\n';
+    const catKeys = Object.keys(categoryBreakdown);
+    catKeys.forEach(cat => {
+      const { allocation, realization } = categoryBreakdown[cat];
+      const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
+      const status = getStatus(usage);
+      csv += `${cat},${allocation},${realization},${usage.toFixed(2)},${status}\n`;
+    });
+    csv += '\n';
 
-    const allData = [...txData, ...summaryRows, ...barRows, ...catHeader, ...catRows];
-    const csv = Papa.unparse(allData as Record<string, unknown>[]);
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    // Section 3: Monthly Trend (chart bar data)
+    csv += 'MONTHLY EXPENSE TREND\n';
+    csv += 'Month,Income,Spending\n';
+    monthlyTrend.labels.forEach(m => {
+      csv += `${m},${monthlyTrend.months[m].masuk},${monthlyTrend.months[m].keluar}\n`;
+    });
+    csv += '\n';
+
+    // Section 4: Category Percentage (chart doughnut data)
+    csv += 'EXPENSE REALIZATION PERCENTAGE\n';
+    csv += 'Category,Amount,Percentage\n';
+    doughnutLabels.forEach(cat => {
+      const pct = totalKeluar > 0 ? ((doughnutCats[cat] / totalKeluar) * 100).toFixed(2) : '0.00';
+      csv += `${cat},${doughnutCats[cat]},${pct}%\n`;
+    });
+    csv += '\n';
+
+    // Section 5: Raw transactions
+    csv += 'TRANSACTION DETAIL\n';
+    csv += 'Date,Category,Description,Qty,Price,Total,Type\n';
+    filtered.forEach(t => {
+      csv += `${t.date},${t.category},${t.description.replace(/,/g, ' ')},${t.quantity},${t.price},${t.total},${t.type}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `keuangan_${period}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    notify('success', 'CSV exported (termasuk chart data)');
+    notify('success', 'CSV exported: ' + filename);
   }
 
   return (
@@ -206,7 +239,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo</p>
-          <p className="text-lg sm:text-xl font-semibold text-white mt-1">{formatRp(totalMasuk - totalKeluar)}</p>
+          <p className="text-lg sm:text-xl font-semibold text-white mt-1">{formatRp(saldo)}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total Item</p>
@@ -214,7 +247,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </div>
       </div>
 
-      {/* Period + Actions */}
+      {/* Period + Export */}
       <div className="flex flex-wrap items-center gap-2">
         {periods.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
@@ -222,11 +255,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             {p.label}
           </button>
         ))}
-        <div className="w-px h-6 bg-gray-700 mx-1 hidden sm:block"></div>
-        <button onClick={() => setShowChart(!showChart)}
-          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${showChart ? 'bg-teal-600 border-teal-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-300 hover:bg-gray-800'}`}>
-          {showChart ? 'Hide Chart' : 'Show Chart'}
-        </button>
         <button onClick={handleExportCSV}
           className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium ml-auto">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
@@ -245,25 +273,70 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </div>
       )}
 
+      {/* Expenses Dashboard Table */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-200">Expenses Dashboard</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-left">
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase">Category</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Allocation</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Realization</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Usage %</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.keys(categoryBreakdown).length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">Belum ada data</td></tr>
+              ) : Object.entries(categoryBreakdown).map(([cat, { allocation, realization }]) => {
+                const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
+                const status = getStatus(usage);
+                const statusColor = status === 'Safe' ? 'text-teal-400 bg-teal-900/30' : status === 'Normal' ? 'text-green-400 bg-green-900/30' : status === 'Warning' ? 'text-yellow-400 bg-yellow-900/30' : 'text-red-400 bg-red-900/30';
+                return (
+                  <tr key={cat} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <td className="px-4 py-3 text-gray-300 font-medium">{cat}</td>
+                    <td className="px-4 py-3 text-gray-300 text-right">{formatRp(allocation)}</td>
+                    <td className="px-4 py-3 text-gray-300 text-right">{formatRp(realization)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden hidden sm:block">
+                          <div className={`h-full rounded-full ${usage > 100 ? 'bg-red-500' : usage >= 70 ? 'bg-yellow-500' : 'bg-teal-500'}`} style={{ width: Math.min(usage, 100) + '%' }}></div>
+                        </div>
+                        <span className="text-gray-300">{usage.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor}`}>{status}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Charts */}
-      {showChart && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Masuk vs Keluar</h3>
-            <div className="h-48 sm:h-64">
-              <Bar data={barData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
-            </div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Pengeluaran per Kategori</h3>
-            <div className="h-48 sm:h-64 flex items-center justify-center">
-              {doughnutLabels.length > 0 ? (
-                <Doughnut data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
-              ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
+          <div className="h-48 sm:h-64">
+            <Bar data={barData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
           </div>
         </div>
-      )}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
+          <div className="h-48 sm:h-64 flex items-center justify-center">
+            {doughnutLabels.length > 0 ? (
+              <Doughnut data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
+            ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
+          </div>
+        </div>
+      </div>
 
       {/* Form */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6">
@@ -320,8 +393,11 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </form>
       </div>
 
-      {/* Table */}
+      {/* Transaction Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-200">Transaction Detail</h3>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
