@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod } from './storage';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import {
   Chart as ChartJS, CategoryScale, LinearScale,
   BarElement, ArcElement, Title, Tooltip, Legend
@@ -24,6 +25,9 @@ interface ReportProps {
 }
 
 export default function Report({ transactions, period, customRange, setPeriod, setCustomRange, notify }: ReportProps) {
+  const barRef = useRef<ChartJS<'bar'>>(null);
+  const doughnutRef = useRef<ChartJS<'doughnut'>>(null);
+
   const filtered = useMemo(() => filterByPeriod(transactions, period, customRange), [transactions, period, customRange]);
   const totalMasuk = filtered.filter(t => t.type === 'masuk').reduce((s, t) => s + t.total, 0);
   const totalKeluar = filtered.filter(t => t.type === 'keluar').reduce((s, t) => s + t.total, 0);
@@ -38,7 +42,6 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     { key: 'all', label: 'Semua' },
   ];
 
-  // Category breakdown
   const categoryData = useMemo(() => {
     const cats: Record<string, number> = {};
     filtered.filter(t => t.type === 'keluar').forEach(t => {
@@ -47,7 +50,6 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     return cats;
   }, [filtered]);
 
-  // Monthly trend
   const monthlyData = useMemo(() => {
     const months: Record<string, { masuk: number; keluar: number }> = {};
     filtered.forEach(t => {
@@ -58,7 +60,6 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     return months;
   }, [filtered]);
 
-  // Budget allocation (for expenses dashboard)
   const expensesDashboard = useMemo(() => {
     const cats: Record<string, { allocation: number; realization: number }> = {};
     filtered.forEach(t => {
@@ -80,11 +81,10 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     return 'Over Budget';
   }
 
-  // Chart data
   const sortedMonths = Object.keys(monthlyData).sort();
   const monthLabels = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const barData = {
-    labels: sortedMonths.map(m => { const [y, mo] = m.split('-'); return monthLabels[parseInt(mo)-1] + ' ' + y.slice(2); }),
+    labels: sortedMonths.map(m => { const [, mo] = m.split('-'); return monthLabels[parseInt(mo)-1]; }),
     datasets: [
       { label: 'Masuk', data: sortedMonths.map(m => monthlyData[m].masuk), backgroundColor: '#14b8a6' },
       { label: 'Keluar', data: sortedMonths.map(m => monthlyData[m].keluar), backgroundColor: '#ef4444' },
@@ -98,86 +98,97 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     datasets: [{ data: doughnutLabels.map(l => categoryData[l]), backgroundColor: colors.slice(0, doughnutLabels.length) }],
   };
 
-  function handleExportXLSX() {
-    const wb = XLSX.utils.book_new();
+  async function handleExportXLSX() {
+    const wb = new ExcelJS.Workbook();
     const now = new Date();
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 
-    // Sheet 1: Summary
-    const summaryRows = [
-      ['MONEY MANAGEMENT REPORT'],
-      ['Period', period === 'custom' ? `${customRange.start} to ${customRange.end}` : period],
-      ['Generated', now.toISOString().split('T')[0]],
-      [],
-      ['SUMMARY'],
-      ['Total Income', totalMasuk],
-      ['Total Spending', totalKeluar],
-      ['Balance', saldo],
-      ['Total Transactions', filtered.length],
+    // Sheet 1: Summary + Charts
+    const ws = wb.addWorksheet('Report');
+    ws.columns = [
+      { width: 18 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 14 },
     ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-    wsSummary['!cols'] = [{ wch: 20 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-    // Sheet 2: Expenses Dashboard
-    const expRows: (string | number)[][] = [
-      ['EXPENSES DASHBOARD'],
-      ['Category', 'Allocation', 'Realization', 'UsagePercent', 'Status'],
-    ];
+    // Title
+    ws.addRow(['MONEY MANAGEMENT REPORT']);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow(['Period', period === 'custom' ? `${customRange.start} to ${customRange.end}` : period]);
+    ws.addRow(['Generated', now.toISOString().split('T')[0]]);
+    ws.addRow([]);
+
+    // Summary
+    ws.addRow(['SUMMARY']);
+    ws.getRow(5).font = { bold: true, size: 11 };
+    ws.addRow(['Total Income', totalMasuk]);
+    ws.addRow(['Total Spending', totalKeluar]);
+    ws.addRow(['Balance', saldo]);
+    ws.addRow(['Total Transactions', filtered.length]);
+    ws.addRow([]);
+
+    // Expenses Dashboard
+    ws.addRow(['EXPENSES DASHBOARD']);
+    ws.getRow(11).font = { bold: true, size: 11 };
+    const headerRow = ws.addRow(['Category', 'Allocation', 'Realization', 'Usage %', 'Status']);
+    headerRow.font = { bold: true };
     Object.entries(expensesDashboard).forEach(([cat, { allocation, realization }]) => {
       const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
-      expRows.push([cat, allocation, realization, parseFloat(usage.toFixed(2)), getStatus(usage)]);
+      ws.addRow([cat, allocation, realization, parseFloat(usage.toFixed(2)), getStatus(usage)]);
     });
-    const wsExp = XLSX.utils.aoa_to_sheet(expRows);
-    wsExp['!cols'] = [{ wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-    XLSX.utils.book_append_sheet(wb, wsExp, 'Expenses Dashboard');
+    ws.addRow([]);
 
-    // Sheet 3: Monthly Trend (bar chart data)
-    const trendRows: (string | number)[][] = [
-      ['MONTHLY EXPENSE TREND'],
-      ['Month', 'Income', 'Spending'],
-    ];
-    sortedMonths.forEach(m => {
-      trendRows.push([m, monthlyData[m].masuk, monthlyData[m].keluar]);
-    });
-    const wsTrend = XLSX.utils.aoa_to_sheet(trendRows);
-    wsTrend['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }];
-    XLSX.utils.book_append_sheet(wb, wsTrend, 'Monthly Trend');
+    // Chart images
+    const chartRow = ws.rowCount + 1;
 
-    // Sheet 4: Category Breakdown (doughnut chart data)
-    const catRows: (string | number)[][] = [
-      ['EXPENSE REALIZATION PERCENTAGE'],
-      ['Category', 'Amount', 'Percentage'],
-    ];
-    doughnutLabels.forEach(cat => {
-      const pct = totalKeluar > 0 ? parseFloat(((categoryData[cat] / totalKeluar) * 100).toFixed(2)) : 0;
-      catRows.push([cat, categoryData[cat], pct]);
-    });
-    const wsCat = XLSX.utils.aoa_to_sheet(catRows);
-    wsCat['!cols'] = [{ wch: 18 }, { wch: 14 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, wsCat, 'Category Breakdown');
+    // Bar chart to PNG
+    if (barRef.current) {
+      const barCanvas = barRef.current.canvas;
+      const barImg = barCanvas.toDataURL('image/png');
+      const barBase64 = barImg.split(',')[1];
+      const barImageId = wb.addImage({ base64: barBase64, extension: 'png' });
+      ws.addImage(barImageId, {
+        tl: { col: 0, row: chartRow },
+        ext: { width: 500, height: 250 },
+      });
+    }
 
-    // Sheet 5: Transaction Detail
-    const txRows: (string | number)[][] = [
-      ['TRANSACTION DETAIL'],
-      ['Date', 'Category', 'Description', 'Qty', 'Price', 'Total', 'Type'],
+    if (doughnutRef.current) {
+      const doughnutCanvas = doughnutRef.current.canvas;
+      const doughnutImg = doughnutCanvas.toDataURL('image/png');
+      const doughnutBase64 = doughnutImg.split(',')[1];
+      const doughnutImageId = wb.addImage({ base64: doughnutBase64, extension: 'png' });
+      ws.addImage(doughnutImageId, {
+        tl: { col: 3, row: chartRow },
+        ext: { width: 350, height: 250 },
+      });
+    }
+
+    // Sheet 2: Transactions
+    const wsTx = wb.addWorksheet('Transactions');
+    wsTx.columns = [
+      { header: 'Date', width: 12 },
+      { header: 'Category', width: 16 },
+      { header: 'Description', width: 28 },
+      { header: 'Qty', width: 6 },
+      { header: 'Price', width: 14 },
+      { header: 'Total', width: 14 },
+      { header: 'Type', width: 8 },
     ];
+    wsTx.getRow(1).font = { bold: true };
     filtered.forEach(t => {
-      txRows.push([t.date, t.category, t.description, t.quantity, t.price, t.total, t.type]);
+      wsTx.addRow([t.date, t.category, t.description, t.quantity, t.price, t.total, t.type]);
     });
-    const wsTx = XLSX.utils.aoa_to_sheet(txRows);
-    wsTx['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 24 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wsTx, 'Transactions');
 
     // Download
-    const filename = `money-management-report-${now.getFullYear()}-${monthNames[now.getMonth()].toLowerCase()}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const filename = `money-management-report-${now.getFullYear()}-${monthNames[now.getMonth()]}.xlsx`;
+    saveAs(blob, filename);
     notify('success', 'XLSX exported: ' + filename);
   }
 
   return (
     <div className="space-y-6">
-      {/* Period Filter */}
+      {/* Period Filter + Export */}
       <div className="flex flex-wrap items-center gap-2">
         {periods.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
@@ -269,14 +280,14 @@ export default function Report({ transactions, period, customRange, setPeriod, s
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
           <div className="h-48 sm:h-64">
-            <Bar data={barData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
+            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
           <div className="h-48 sm:h-64 flex items-center justify-center">
             {doughnutLabels.length > 0 ? (
-              <Doughnut data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
+              <Doughnut ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
             ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
           </div>
         </div>
