@@ -9,4 +9,9 @@ export interface Transaction {
   type: 'masuk' | 'keluar';
 }
 
-export type Period = '1w' | '1m' | '3m' | 'all';
+export type Period = '1w' | '1m' | '3m' | '1y' | 'custom' | 'all';
+
+export interface DateRange {
+  start: string;
+  end: string;
+}

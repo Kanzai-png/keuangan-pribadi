@@ -1,4 +1,4 @@
-import type { Transaction } from './types';
+import type { Transaction, DateRange } from './types';
 
 const REPO = 'Kanzai-png/keuangan-pribadi';
 const FILE_PATH = 'data/transactions.json';
@@ -97,9 +97,15 @@ export function saveToLocal(transactions: Transaction[]): void {
   localStorage.setItem('keuangan_transactions', JSON.stringify(transactions));
 }
 
-export function filterByPeriod(transactions: Transaction[], period: string): Transaction[] {
+export function filterByPeriod(
+  transactions: Transaction[],
+  period: string,
+  customRange?: DateRange
+): Transaction[] {
   const now = new Date();
   let startDate: Date;
+  let endDate: Date = now;
+
   switch (period) {
     case '1w':
       startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -110,10 +116,23 @@ export function filterByPeriod(transactions: Transaction[], period: string): Tra
     case '3m':
       startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
       break;
+    case '1y':
+      startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      break;
+    case 'custom':
+      if (!customRange) return transactions;
+      startDate = new Date(customRange.start);
+      endDate = new Date(customRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      break;
     default:
       return transactions;
   }
-  return transactions.filter(t => new Date(t.date) >= startDate);
+
+  return transactions.filter(t => {
+    const d = new Date(t.date);
+    return d >= startDate && d <= endDate;
+  });
 }
 
 export function generateId(): string {
