@@ -1,13 +1,6 @@
 import { useState } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod, generateId } from './storage';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale,
-  BarElement, ArcElement, Title, Tooltip, Legend
-} from 'chart.js';
-import { Bar, Doughnut } from 'react-chartjs-2';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
 function formatRp(n: number) {
   return 'Rp' + n.toLocaleString('id-ID');
@@ -52,63 +45,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     { key: 'all', label: 'Semua' },
   ];
 
-  // Category breakdown (allocation = total per category, realization = actual spending)
-  const categoryBreakdown = (() => {
-    const cats: Record<string, { allocation: number; realization: number }> = {};
-    // Allocation = sum of all transactions per category (budget plan)
-    // Realization = actual spending (keluar only)
-    filtered.forEach(t => {
-      if (!cats[t.category]) cats[t.category] = { allocation: 0, realization: 0 };
-      if (t.type === 'keluar') {
-        cats[t.category].realization += t.total;
-        cats[t.category].allocation += t.total; // default allocation = realization until user sets budget
-      } else {
-        cats[t.category].allocation += t.total;
-      }
-    });
-    return cats;
-  })();
-
-  // Monthly trend data
-  const monthlyTrend = (() => {
-    const months: Record<string, { masuk: number; keluar: number }> = {};
-    filtered.forEach(t => {
-      const month = t.date.slice(0, 7); // YYYY-MM
-      if (!months[month]) months[month] = { masuk: 0, keluar: 0 };
-      months[month][t.type] += t.total;
-    });
-    const labels = Object.keys(months).sort();
-    return { labels, months };
-  })();
-
-  // Doughnut data
-  const doughnutCats = (() => {
-    const cats: Record<string, number> = {};
-    filtered.filter(t => t.type === 'keluar').forEach(t => {
-      cats[t.category] = (cats[t.category] || 0) + t.total;
-    });
-    return cats;
-  })();
-
-  const barData = {
-    labels: monthlyTrend.labels.map(m => {
-      const [y, mo] = m.split('-');
-      const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-      return months[parseInt(mo) - 1] + ' ' + y.slice(2);
-    }),
-    datasets: [
-      { label: 'Masuk', data: monthlyTrend.labels.map(m => monthlyTrend.months[m].masuk), backgroundColor: '#14b8a6' },
-      { label: 'Keluar', data: monthlyTrend.labels.map(m => monthlyTrend.months[m].keluar), backgroundColor: '#ef4444' },
-    ],
-  };
-
-  const doughnutLabels = Object.keys(doughnutCats);
-  const colors = ['#14b8a6', '#f59e0b', '#ef4444', '#6366f1', '#06b6d4', '#ec4899', '#8b5cf6', '#22c55e', '#f97316', '#a855f7'];
-  const doughnutData = {
-    labels: doughnutLabels,
-    datasets: [{ data: doughnutLabels.map(l => doughnutCats[l]), backgroundColor: colors.slice(0, doughnutLabels.length) }],
-  };
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.category || !form.description || form.price <= 0) {
@@ -138,78 +74,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     onDelete(deleteId);
     setDeleteId(null);
     notify('success', 'Transaksi dihapus');
-  }
-
-  function getStatus(usage: number): string {
-    if (usage === 0) return 'Safe';
-    if (usage < 70) return 'Normal';
-    if (usage <= 100) return 'Warning';
-    return 'Over Budget';
-  }
-
-  function handleExportCSV() {
-    const now = new Date();
-    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-    const filename = `money-management-report-${now.getFullYear()}-${monthNames[now.getMonth()]}.csv`;
-
-    let csv = '\ufeff'; // UTF-8 BOM
-
-    // Section 1: Summary
-    csv += 'MONEY MANAGEMENT REPORT\n';
-    csv += `Period,${period === 'custom' ? customRange.start + ' to ' + customRange.end : period}\n`;
-    csv += `Generated,${now.toISOString().split('T')[0]}\n`;
-    csv += '\n';
-    csv += 'SUMMARY\n';
-    csv += `Total Income,${totalMasuk}\n`;
-    csv += `Total Spending,${totalKeluar}\n`;
-    csv += `Balance,${saldo}\n`;
-    csv += `Total Items,${totalItems}\n`;
-    csv += '\n';
-
-    // Section 2: Expenses Dashboard (Category, Allocation, Realization, UsagePercent, Status)
-    csv += 'EXPENSES DASHBOARD\n';
-    csv += 'Category,Allocation,Realization,UsagePercent,Status\n';
-    const catKeys = Object.keys(categoryBreakdown);
-    catKeys.forEach(cat => {
-      const { allocation, realization } = categoryBreakdown[cat];
-      const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
-      const status = getStatus(usage);
-      csv += `${cat},${allocation},${realization},${usage.toFixed(2)},${status}\n`;
-    });
-    csv += '\n';
-
-    // Section 3: Monthly Trend (chart bar data)
-    csv += 'MONTHLY EXPENSE TREND\n';
-    csv += 'Month,Income,Spending\n';
-    monthlyTrend.labels.forEach(m => {
-      csv += `${m},${monthlyTrend.months[m].masuk},${monthlyTrend.months[m].keluar}\n`;
-    });
-    csv += '\n';
-
-    // Section 4: Category Percentage (chart doughnut data)
-    csv += 'EXPENSE REALIZATION PERCENTAGE\n';
-    csv += 'Category,Amount,Percentage\n';
-    doughnutLabels.forEach(cat => {
-      const pct = totalKeluar > 0 ? ((doughnutCats[cat] / totalKeluar) * 100).toFixed(2) : '0.00';
-      csv += `${cat},${doughnutCats[cat]},${pct}%\n`;
-    });
-    csv += '\n';
-
-    // Section 5: Raw transactions
-    csv += 'TRANSACTION DETAIL\n';
-    csv += 'Date,Category,Description,Qty,Price,Total,Type\n';
-    filtered.forEach(t => {
-      csv += `${t.date},${t.category},${t.description.replace(/,/g, ' ')},${t.quantity},${t.price},${t.total},${t.type}\n`;
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    notify('success', 'CSV exported: ' + filename);
   }
 
   return (
@@ -247,7 +111,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </div>
       </div>
 
-      {/* Period + Export */}
+      {/* Period Filter */}
       <div className="flex flex-wrap items-center gap-2">
         {periods.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
@@ -255,11 +119,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             {p.label}
           </button>
         ))}
-        <button onClick={handleExportCSV}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium ml-auto">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-          Export CSV
-        </button>
       </div>
 
       {period === 'custom' && (
@@ -272,71 +131,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
       )}
-
-      {/* Expenses Dashboard Table */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-200">Expenses Dashboard</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-left">
-                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase">Category</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Allocation</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Realization</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase text-right">Usage %</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(categoryBreakdown).length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">Belum ada data</td></tr>
-              ) : Object.entries(categoryBreakdown).map(([cat, { allocation, realization }]) => {
-                const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
-                const status = getStatus(usage);
-                const statusColor = status === 'Safe' ? 'text-teal-400 bg-teal-900/30' : status === 'Normal' ? 'text-green-400 bg-green-900/30' : status === 'Warning' ? 'text-yellow-400 bg-yellow-900/30' : 'text-red-400 bg-red-900/30';
-                return (
-                  <tr key={cat} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="px-4 py-3 text-gray-300 font-medium">{cat}</td>
-                    <td className="px-4 py-3 text-gray-300 text-right">{formatRp(allocation)}</td>
-                    <td className="px-4 py-3 text-gray-300 text-right">{formatRp(realization)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden hidden sm:block">
-                          <div className={`h-full rounded-full ${usage > 100 ? 'bg-red-500' : usage >= 70 ? 'bg-yellow-500' : 'bg-teal-500'}`} style={{ width: Math.min(usage, 100) + '%' }}></div>
-                        </div>
-                        <span className="text-gray-300">{usage.toFixed(1)}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor}`}>{status}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
-          <div className="h-48 sm:h-64">
-            <Bar data={barData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
-          <div className="h-48 sm:h-64 flex items-center justify-center">
-            {doughnutLabels.length > 0 ? (
-              <Doughnut data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
-            ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
-          </div>
-        </div>
-      </div>
 
       {/* Form */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6">
@@ -396,7 +190,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
       {/* Transaction Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-200">Transaction Detail</h3>
+          <h3 className="text-sm font-semibold text-gray-200">Riwayat Transaksi ({filtered.length})</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
