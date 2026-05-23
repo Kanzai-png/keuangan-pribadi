@@ -1,29 +1,98 @@
 import type { Transaction, Period, DateRange } from './types';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  'https://heuqbytnhgidaqzcxcry.supabase.co',
+  'sb_publishable_mJ9SScZw_pAlPtJL67BjUw_U6k1knur'
+);
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// Storage using localStorage keyed by user ID
-function getStorageKey(userId: string): string {
-  return `kenzai_transactions_${userId}`;
-}
+export async function loadTransactions(userId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: false });
 
-export function loadTransactions(userId: string): Transaction[] {
-  const raw = localStorage.getItem(getStorageKey(userId));
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
+  if (error) {
+    console.error('Load error:', error);
     return [];
   }
+
+  return (data || []).map(row => ({
+    id: row.id,
+    date: row.date,
+    category: row.category,
+    description: row.description,
+    quantity: row.quantity,
+    price: row.price,
+    total: row.total,
+    type: row.type as 'masuk' | 'keluar',
+  }));
 }
 
-export function saveTransactions(userId: string, transactions: Transaction[]): void {
-  localStorage.setItem(getStorageKey(userId), JSON.stringify(transactions));
+export async function addTransaction(userId: string, t: Transaction): Promise<boolean> {
+  const { error } = await supabase
+    .from('transactions')
+    .insert({
+      id: t.id,
+      user_id: userId,
+      date: t.date,
+      category: t.category,
+      description: t.description,
+      quantity: t.quantity,
+      price: t.price,
+      total: t.total,
+      type: t.type,
+    });
+
+  if (error) {
+    console.error('Insert error:', error);
+    return false;
+  }
+  return true;
 }
 
-// Period filter
+export async function updateTransaction(userId: string, t: Transaction): Promise<boolean> {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      date: t.date,
+      category: t.category,
+      description: t.description,
+      quantity: t.quantity,
+      price: t.price,
+      total: t.total,
+      type: t.type,
+    })
+    .eq('id', t.id)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Update error:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteTransaction(userId: string, id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Delete error:', error);
+    return false;
+  }
+  return true;
+}
+
+// Period filter (client-side)
 export function filterByPeriod(transactions: Transaction[], period: Period, customRange?: DateRange): Transaction[] {
   const now = new Date();
   let start: Date;

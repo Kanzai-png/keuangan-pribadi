@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser, useClerk, SignIn, SignUp } from '@clerk/clerk-react';
 import type { Transaction, Period, DateRange } from './types';
-import { loadTransactions, saveTransactions, generateId } from './storage';
+import { loadTransactions, addTransaction, updateTransaction, deleteTransaction, generateId } from './storage';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import Report from './Report';
@@ -23,6 +23,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [loading, setLoading] = useState(false);
 
   const notify = useCallback((type: Alert['type'], message: string) => {
     const id = generateId();
@@ -32,30 +33,45 @@ export default function App() {
 
   useEffect(() => {
     if (isSignedIn && user) {
-      const data = loadTransactions(user.id);
-      setTransactions(data);
+      setLoading(true);
+      loadTransactions(user.id).then(data => {
+        setTransactions(data);
+        setLoading(false);
+      });
     }
   }, [isSignedIn, user]);
 
-  function save(updated: Transaction[]) {
+  async function handleAdd(t: Transaction) {
     if (!user) return;
-    setTransactions(updated);
-    saveTransactions(user.id, updated);
+    const ok = await addTransaction(user.id, t);
+    if (ok) {
+      setTransactions(prev => [t, ...prev]);
+      notify('success', 'Transaksi ditambahkan');
+    } else {
+      notify('error', 'Gagal menambah transaksi');
+    }
   }
 
-  function handleAdd(t: Transaction) {
-    save([t, ...transactions]);
-    notify('success', 'Transaksi ditambahkan');
+  async function handleEdit(t: Transaction) {
+    if (!user) return;
+    const ok = await updateTransaction(user.id, t);
+    if (ok) {
+      setTransactions(prev => prev.map(x => x.id === t.id ? t : x));
+      notify('success', 'Transaksi diupdate');
+    } else {
+      notify('error', 'Gagal update transaksi');
+    }
   }
 
-  function handleEdit(t: Transaction) {
-    save(transactions.map(x => x.id === t.id ? t : x));
-    notify('success', 'Transaksi diupdate');
-  }
-
-  function handleDelete(id: string) {
-    save(transactions.filter(x => x.id !== id));
-    notify('success', 'Transaksi dihapus');
+  async function handleDelete(id: string) {
+    if (!user) return;
+    const ok = await deleteTransaction(user.id, id);
+    if (ok) {
+      setTransactions(prev => prev.filter(x => x.id !== id));
+      notify('success', 'Transaksi dihapus');
+    } else {
+      notify('error', 'Gagal hapus transaksi');
+    }
   }
 
   async function handleLogout() {
@@ -74,7 +90,6 @@ export default function App() {
     );
   }
 
-  // Auth screen
   if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -91,7 +106,6 @@ export default function App() {
           </div>
 
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl shadow-black/20">
-            {/* Tab switcher */}
             <div className="flex bg-gray-800 rounded-xl p-1 mb-6">
               <button onClick={() => setAuthMode('login')}
                 className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${authMode === 'login' ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -103,7 +117,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Clerk SignIn/SignUp components */}
             <div className="clerk-container">
               {authMode === 'login' ? (
                 <SignIn appearance={{
@@ -150,7 +163,6 @@ export default function App() {
           <p className="text-center text-xs text-gray-600 mt-6">Secure authentication by Clerk</p>
         </div>
 
-        {/* Alerts */}
         <div className="fixed top-4 right-4 z-50 space-y-2">
           {alerts.map(a => (
             <div key={a.id} className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
@@ -164,7 +176,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex">
-      {/* Alerts */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {alerts.map(a => (
           <div key={a.id} className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
@@ -173,10 +184,8 @@ export default function App() {
         ))}
       </div>
 
-      {/* Sidebar */}
       <Sidebar activePage={activePage} setActivePage={setActivePage} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
-      {/* Main Content */}
       <div className="flex-1 min-w-0">
         <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -199,7 +208,12 @@ export default function App() {
         </header>
 
         <main className="px-4 sm:px-6 lg:px-8 py-6">
-          {activePage === 'dashboard' ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="ml-3 text-sm text-gray-400">Memuat data...</span>
+            </div>
+          ) : activePage === 'dashboard' ? (
             <Dashboard
               transactions={transactions}
               period={period}
