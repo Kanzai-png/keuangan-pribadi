@@ -1,27 +1,107 @@
 import type { Transaction } from './types';
 
-const STORAGE_KEY = 'keuangan_transactions';
+const REPO = 'Kanzai-png/keuangan-pribadi';
+const FILE_PATH = 'data/transactions.json';
+const BRANCH = 'master';
 
-export function getTransactions(): Transaction[] {
-  const data = localStorage.getItem(STORAGE_KEY);
+// GitHub PAT - loaded from env or hardcoded for now
+let githubToken = '';
+
+export function setGithubToken(token: string) {
+  githubToken = token;
+  localStorage.setItem('gh_token', token);
+}
+
+export function getGithubToken(): string {
+  if (!githubToken) {
+    githubToken = localStorage.getItem('gh_token') || '';
+  }
+  return githubToken;
+}
+
+async function getFileSha(): Promise<string | null> {
+  const token = getGithubToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      return data.sha;
+    }
+  } catch {}
+  return null;
+}
+
+export async function loadFromGithub(): Promise<Transaction[]> {
+  const token = getGithubToken();
+  if (!token) return loadFromLocal();
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const content = atob(data.content);
+      const transactions = JSON.parse(content);
+      localStorage.setItem('keuangan_transactions', JSON.stringify(transactions));
+      return transactions;
+    }
+  } catch {}
+  return loadFromLocal();
+}
+
+export async function saveToGithub(transactions: Transaction[]): Promise<boolean> {
+  const token = getGithubToken();
+  if (!token) {
+    saveToLocal(transactions);
+    return false;
+  }
+
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(transactions, null, 2))));
+  const sha = await getFileSha();
+
+  const body: Record<string, string> = {
+    message: `update transactions ${new Date().toISOString().split('T')[0]}`,
+    content,
+    branch: BRANCH,
+  };
+  if (sha) body.sha = sha;
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    if (res.ok) {
+      saveToLocal(transactions);
+      return true;
+    }
+  } catch {}
+
+  saveToLocal(transactions);
+  return false;
+}
+
+export function loadFromLocal(): Transaction[] {
+  const data = localStorage.getItem('keuangan_transactions');
   return data ? JSON.parse(data) : [];
 }
 
-export function saveTransactions(transactions: Transaction[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-}
-
-export function addTransaction(tx: Transaction): Transaction[] {
-  const transactions = getTransactions();
-  transactions.unshift(tx);
-  saveTransactions(transactions);
-  return transactions;
-}
-
-export function deleteTransaction(id: string): Transaction[] {
-  const transactions = getTransactions().filter(t => t.id !== id);
-  saveTransactions(transactions);
-  return transactions;
+export function saveToLocal(transactions: Transaction[]): void {
+  localStorage.setItem('keuangan_transactions', JSON.stringify(transactions));
 }
 
 export function filterByPeriod(transactions: Transaction[], period: string): Transaction[] {
@@ -43,21 +123,6 @@ export function filterByPeriod(transactions: Transaction[], period: string): Tra
   }
 
   return transactions.filter(t => new Date(t.date) >= startDate);
-}
-
-export function exportCSV(transactions: Transaction[]): void {
-  const header = 'Tanggal,Kategori,Deskripsi,Jumlah,Tipe\n';
-  const rows = transactions.map(t =>
-    `${t.date},${t.category},${t.description},${t.amount},${t.type}`
-  ).join('\n');
-
-  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `keuangan_${new Date().toISOString().split('T')[0]}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 export function generateId(): string {
