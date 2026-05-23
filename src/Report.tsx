@@ -279,15 +279,15 @@ export default function Report({ transactions, period, customRange, setPeriod, s
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
-          <div className="h-48 sm:h-64">
-            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
+          <div className="h-[200px] sm:h-[280px] relative">
+            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
-          <div className="h-48 sm:h-64 flex items-center justify-center">
+          <div className="h-[200px] sm:h-[280px] relative">
             {doughnutLabels.length > 0 ? (
-              <Doughnut ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
+              <Doughnut ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
             ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
           </div>
         </div>
