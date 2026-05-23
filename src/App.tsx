@@ -6,7 +6,6 @@ import {
 } from './storage';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
-import Report from './Report';
 
 interface Alert {
   id: string;
@@ -18,7 +17,6 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [period, setPeriod] = useState<Period>('all');
   const [customRange, setCustomRange] = useState<DateRange>({ start: '', end: '' });
-  const [activePage, setActivePage] = useState<'dashboard' | 'report'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [synced, setSynced] = useState(false);
@@ -111,10 +109,10 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <Sidebar activePage={activePage} setActivePage={setActivePage} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
+      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 lg:ml-0">
+      <div className="flex-1 min-w-0">
         {/* Top Bar */}
         <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -123,7 +121,7 @@ export default function App() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <div>
-                <h2 className="text-lg font-semibold text-white">{activePage === 'dashboard' ? 'Dashboard' : 'Laporan'}</h2>
+                <h2 className="text-lg font-semibold text-white">Dashboard</h2>
                 <p className="text-xs text-gray-400">{transactions.length} total transaksi</p>
               </div>
             </div>
@@ -136,30 +134,19 @@ export default function App() {
           </div>
         </header>
 
-        {/* Page Content */}
+        {/* Dashboard */}
         <main className="px-4 sm:px-6 lg:px-8 py-6">
-          {activePage === 'dashboard' ? (
-            <Dashboard
-              transactions={transactions}
-              period={period}
-              customRange={customRange}
-              setPeriod={setPeriod}
-              setCustomRange={setCustomRange}
-              onAdd={handleAdd}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              notify={notify}
-            />
-          ) : (
-            <Report
-              transactions={transactions}
-              period={period}
-              customRange={customRange}
-              setPeriod={setPeriod}
-              setCustomRange={setCustomRange}
-              notify={notify}
-            />
-          )}
+          <Dashboard
+            transactions={transactions}
+            period={period}
+            customRange={customRange}
+            setPeriod={setPeriod}
+            setCustomRange={setCustomRange}
+            onAdd={handleAdd}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            notify={notify}
+          />
         </main>
       </div>
     </div>

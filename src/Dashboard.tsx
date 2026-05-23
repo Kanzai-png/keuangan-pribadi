@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod, generateId } from './storage';
+import Papa from 'papaparse';
 import {
   Chart as ChartJS, CategoryScale, LinearScale,
   BarElement, ArcElement, Title, Tooltip, Legend
@@ -26,9 +27,9 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ transactions, period, customRange, setPeriod, setCustomRange, onAdd, onEdit, onDelete, notify }: DashboardProps) {
-  const [showChart, setShowChart] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [showChart, setShowChart] = useState(true);
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     category: '',
@@ -51,6 +52,40 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     { key: 'custom', label: 'Custom' },
     { key: 'all', label: 'Semua' },
   ];
+
+  // Chart data
+  const barChartData = (() => {
+    const days: Record<string, { masuk: number; keluar: number }> = {};
+    filtered.forEach(t => {
+      if (!days[t.date]) days[t.date] = { masuk: 0, keluar: 0 };
+      days[t.date][t.type] += t.total;
+    });
+    const labels = Object.keys(days).sort();
+    return { labels, days };
+  })();
+
+  const categoryData = (() => {
+    const cats: Record<string, number> = {};
+    filtered.filter(t => t.type === 'keluar').forEach(t => {
+      cats[t.category] = (cats[t.category] || 0) + t.total;
+    });
+    return cats;
+  })();
+
+  const barData = {
+    labels: barChartData.labels.map(d => d.slice(5)),
+    datasets: [
+      { label: 'Masuk', data: barChartData.labels.map(d => barChartData.days[d].masuk), backgroundColor: '#14b8a6' },
+      { label: 'Keluar', data: barChartData.labels.map(d => barChartData.days[d].keluar), backgroundColor: '#ef4444' },
+    ],
+  };
+
+  const doughnutLabels = Object.keys(categoryData);
+  const colors = ['#14b8a6', '#f59e0b', '#ef4444', '#6366f1', '#06b6d4', '#ec4899', '#8b5cf6', '#22c55e', '#f97316', '#a855f7'];
+  const doughnutData = {
+    labels: doughnutLabels,
+    datasets: [{ data: doughnutLabels.map(l => categoryData[l]), backgroundColor: colors.slice(0, doughnutLabels.length) }],
+  };
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,35 +118,66 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     notify('success', 'Transaksi dihapus');
   }
 
-  // Chart data
-  const barData = (() => {
-    const days: Record<string, { masuk: number; keluar: number }> = {};
-    filtered.forEach(t => {
-      if (!days[t.date]) days[t.date] = { masuk: 0, keluar: 0 };
-      days[t.date][t.type] += t.total;
-    });
-    const labels = Object.keys(days).sort();
-    return {
-      labels: labels.map(d => d.slice(5)),
-      datasets: [
-        { label: 'Masuk', data: labels.map(d => days[d].masuk), backgroundColor: '#14b8a6' },
-        { label: 'Keluar', data: labels.map(d => days[d].keluar), backgroundColor: '#ef4444' },
-      ],
-    };
-  })();
+  function handleExportCSV() {
+    // Section 1: Transactions
+    const txData = filtered.map(t => ({
+      Tanggal: t.date,
+      Kategori: t.category,
+      Deskripsi: t.description,
+      Qty: t.quantity,
+      'Harga Satuan': t.price,
+      Total: t.total,
+      Tipe: t.type,
+    }));
 
-  const doughnutData = (() => {
-    const cats: Record<string, number> = {};
-    filtered.filter(t => t.type === 'keluar').forEach(t => {
-      cats[t.category] = (cats[t.category] || 0) + t.total;
-    });
-    const labels = Object.keys(cats);
-    const colors = ['#14b8a6', '#f59e0b', '#ef4444', '#6366f1', '#06b6d4', '#ec4899', '#8b5cf6', '#22c55e'];
-    return {
-      labels,
-      datasets: [{ data: labels.map(l => cats[l]), backgroundColor: colors.slice(0, labels.length) }],
-    };
-  })();
+    // Section 2: Summary
+    const summaryRows = [
+      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+      { Tanggal: '=== RINGKASAN ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+      { Tanggal: 'Total Masuk', Kategori: '', Deskripsi: '', Qty: totalItems, 'Harga Satuan': '', Total: totalMasuk, Tipe: '' },
+      { Tanggal: 'Total Keluar', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: totalKeluar, Tipe: '' },
+      { Tanggal: 'Saldo', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: totalMasuk - totalKeluar, Tipe: '' },
+      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+      { Tanggal: '=== CHART: Masuk vs Keluar per Hari ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+    ];
+
+    // Section 3: Bar chart data
+    const barRows = barChartData.labels.map(d => ({
+      Tanggal: d,
+      Kategori: '',
+      Deskripsi: '',
+      Qty: '',
+      'Harga Satuan': barChartData.days[d].masuk,
+      Total: barChartData.days[d].keluar,
+      Tipe: '',
+    }));
+
+    // Section 4: Category breakdown
+    const catHeader = [
+      { Tanggal: '', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+      { Tanggal: '=== CHART: Pengeluaran per Kategori ===', Kategori: '', Deskripsi: '', Qty: '', 'Harga Satuan': '', Total: '', Tipe: '' },
+    ];
+    const catRows = doughnutLabels.map(cat => ({
+      Tanggal: cat,
+      Kategori: '',
+      Deskripsi: '',
+      Qty: '',
+      'Harga Satuan': '',
+      Total: categoryData[cat],
+      Tipe: Math.round((categoryData[cat] / totalKeluar) * 100) + '%',
+    }));
+
+    const allData = [...txData, ...summaryRows, ...barRows, ...catHeader, ...catRows];
+    const csv = Papa.unparse(allData as Record<string, unknown>[]);
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `keuangan_${period}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('success', 'CSV exported (termasuk chart data)');
+  }
 
   return (
     <div className="space-y-6">
@@ -148,19 +214,24 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         </div>
       </div>
 
-      {/* Chart Toggle + Period */}
+      {/* Period + Actions */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => setShowChart(!showChart)}
-          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${showChart ? 'bg-teal-600 border-teal-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-300 hover:bg-gray-800'}`}>
-          {showChart ? 'Sembunyikan Chart' : 'Tampilkan Chart'}
-        </button>
-        <div className="w-px h-6 bg-gray-700 mx-1 hidden sm:block"></div>
         {periods.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${period === p.key ? 'bg-teal-600 border-teal-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-300 hover:bg-gray-800'}`}>
             {p.label}
           </button>
         ))}
+        <div className="w-px h-6 bg-gray-700 mx-1 hidden sm:block"></div>
+        <button onClick={() => setShowChart(!showChart)}
+          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${showChart ? 'bg-teal-600 border-teal-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-300 hover:bg-gray-800'}`}>
+          {showChart ? 'Hide Chart' : 'Show Chart'}
+        </button>
+        <button onClick={handleExportCSV}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium ml-auto">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          Export CSV
+        </button>
       </div>
 
       {period === 'custom' && (
@@ -186,7 +257,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 className="text-sm font-medium text-gray-300 mb-3">Pengeluaran per Kategori</h3>
             <div className="h-48 sm:h-64 flex items-center justify-center">
-              {doughnutData.labels.length > 0 ? (
+              {doughnutLabels.length > 0 ? (
                 <Doughnut data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
               ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
             </div>
