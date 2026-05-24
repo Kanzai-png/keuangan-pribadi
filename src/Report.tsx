@@ -105,32 +105,18 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     const currentMonth = monthNames[now.getMonth()];
     const currentYear = now.getFullYear();
 
-    // Colors
-    // const DARK_BG = '0D0D14';
-    const CARD_BG = '1A1A24';
-    const HEADER_BG = '1F2937';
-    const TEAL = '14B8A6';
-    const RED = 'EF4444';
-    const YELLOW = 'F59E0B';
-    const GREEN = '22C55E';
-    const GRAY_TEXT = '9CA3AF';
-    const WHITE = 'FFFFFF';
-    const BORDER_COLOR = '374151';
-
-    const ws = wb.addWorksheet('Dashboard', {
-      properties: { tabColor: { argb: TEAL } },
-      pageSetup: { paperSize: 9, orientation: 'landscape' },
-    });
-
-    ws.columns = [
-      { width: 20 },
-      { width: 18 },
-      { width: 18 },
-      { width: 16 },
-      { width: 4 },
-      { width: 18 },
-      { width: 20 },
-    ];
+    // Colors matching template
+    const TEAL_DARK = 'FF1A7A7A';
+    const TEAL = 'FF2E9E9E';
+    const WHITE = 'FFFFFFFF';
+    const BLACK = 'FF000000';
+    const BLUE = 'FF0000FF';
+    const RED_TEXT = 'FFFF0000';
+    const GRAY = 'FF555555';
+    const LIGHT_GRAY = 'FFAAAAAA';
+    const ALT_ROW = 'FFF9F9F9';
+    const TOTAL_ROW = 'FFE0F5F5';
+    const BORDER_COLOR = 'FF000000';
 
     const thinBorder: Partial<ExcelJS.Borders> = {
       top: { style: 'thin', color: { argb: BORDER_COLOR } },
@@ -140,155 +126,338 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     };
 
     const rpFmt = '#,##0';
+    const pctFmt = '0.00%';
 
-    // === HEADER ===
-    ws.mergeCells('A1:G1');
-    const titleCell = ws.getCell('A1');
-    titleCell.value = 'Money Management Dashboard';
-    titleCell.font = { bold: true, size: 18, color: { argb: WHITE } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(1).height = 36;
-
-    ws.mergeCells('A2:G2');
-    const subtitleCell = ws.getCell('A2');
-    subtitleCell.value = `${currentMonth} ${currentYear}`;
-    subtitleCell.font = { size: 12, color: { argb: GRAY_TEXT } };
-    subtitleCell.alignment = { horizontal: 'center' };
-
-    // === SUMMARY CARDS (F-G, rows 4-7) ===
-    const summaryItems: [string, number, string][] = [
-      ['Total Income', totalMasuk, TEAL],
-      ['Savings', saldo > 0 ? saldo : 0, TEAL],
-      ['Total Spending', totalKeluar, RED],
-      ['Balance', saldo, saldo >= 0 ? TEAL : RED],
+    // ========== SHEET 1: REPORT ==========
+    const ws = wb.addWorksheet('Report', { properties: { tabColor: { argb: '14B8A6' } } });
+    ws.columns = [
+      { width: 22 }, { width: 18 }, { width: 18 }, { width: 35 },
+      { width: 12 }, { width: 4 }, { width: 14 }, { width: 16 },
     ];
 
-    for (let i = 0; i < summaryItems.length; i++) {
-      const r = 4 + i;
-      const labelCell = ws.getCell(`F${r}`);
-      labelCell.value = summaryItems[i][0];
-      labelCell.font = { bold: true, size: 10, color: { argb: GRAY_TEXT } };
-      labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CARD_BG } };
-      labelCell.alignment = { horizontal: 'left', vertical: 'middle' };
-      labelCell.border = thinBorder;
+    // Row 1: Title
+    ws.mergeCells('A1:C1');
+    const titleCell = ws.getCell('A1');
+    titleCell.value = 'Money Management Dashboard';
+    titleCell.font = { bold: true, size: 16, color: { argb: TEAL_DARK.replace('FF','') } };
+    titleCell.alignment = { horizontal: 'left', vertical: "middle" };
+    ws.getRow(1).height = 30;
 
-      const valueCell = ws.getCell(`G${r}`);
-      valueCell.value = summaryItems[i][1];
-      valueCell.font = { bold: true, size: 12, color: { argb: summaryItems[i][2] } };
-      valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CARD_BG } };
-      valueCell.alignment = { horizontal: 'right', vertical: 'middle' };
-      valueCell.border = thinBorder;
-      valueCell.numFmt = rpFmt;
-    }
+    const dateCell = ws.getCell('D1');
+    dateCell.value = `Year: ${currentYear}     Month: ${currentMonth}`;
+    dateCell.font = { size: 10, color: { argb: GRAY.replace('FF','') } };
+    dateCell.alignment = { horizontal: 'right', vertical: "middle" };
 
-    // === EXPENSES TABLE ===
-    const tableHeaders = ['Category', 'Allocation', 'Realization', 'Budget Usage %'];
-    const headerRowNum = 4;
-    ws.getRow(headerRowNum).height = 28;
-    for (let c = 0; c < 4; c++) {
-      const cell = ws.getCell(headerRowNum, c + 1);
-      cell.value = tableHeaders[c];
-      cell.font = { bold: true, size: 10, color: { argb: WHITE } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
-      cell.alignment = { horizontal: c >= 1 ? 'right' : 'left', vertical: 'middle' };
+    // Row 2: Section header
+    ws.mergeCells('A2:E2');
+    const sectionCell = ws.getCell('A2');
+    sectionCell.value = 'Monthly Report';
+    sectionCell.font = { bold: true, size: 11, color: { argb: WHITE.replace('FF','') } };
+    sectionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_DARK.replace('FF','') } };
+    sectionCell.alignment = { horizontal: 'center', vertical: "middle" };
+    ws.getRow(2).height = 21.75;
+
+    // Row 3: Summary headers
+    const summaryHeaders = ['Total Income', 'December Savings', 'December Spending', 'Balance Bank 1'];
+    summaryHeaders.forEach((h, i) => {
+      const cell = ws.getCell(3, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 9, color: { argb: WHITE.replace('FF','') } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL.replace('FF','') } };
+      cell.alignment = { horizontal: 'center', vertical: "middle" };
       cell.border = thinBorder;
-    }
+    });
+    ws.getRow(3).height = 18;
 
-    let dataRowNum = 5;
+    // Row 4: Summary values
+    const summaryVals = [
+      { val: totalMasuk, color: BLUE },
+      { val: saldo > 0 ? saldo : 0, color: BLUE },
+      { val: totalKeluar, color: BLACK },
+      { val: saldo, color: BLACK },
+    ];
+    summaryVals.forEach((s, i) => {
+      const cell = ws.getCell(4, i + 1);
+      cell.value = s.val;
+      cell.font = { bold: true, size: 13, color: { argb: s.color.replace('FF','') } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE.replace('FF','') } };
+      cell.alignment = { horizontal: 'center', vertical: "middle" };
+      cell.border = thinBorder;
+      cell.numFmt = rpFmt;
+    });
+    ws.getRow(4).height = 24;
+
+    // Row 5: Spacer
+    ws.getRow(5).height = 6;
+
+    // Row 6: Expenses header
+    const expHeaders = ['Expenses List', 'Allocation', 'Realization', 'Budget Usage Progress', '% Usage'];
+    expHeaders.forEach((h, i) => {
+      const cell = ws.getCell(6, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 9, color: { argb: WHITE.replace('FF','') } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL.replace('FF','') } };
+      cell.alignment = { horizontal: 'center', vertical: "middle" };
+      cell.border = thinBorder;
+    });
+    ws.getRow(6).height = 18;
+
+    // Rows 7+: Expense data with alternating colors
+    let dataRow = 7;
     const expenseEntries = Object.entries(expensesDashboard);
-    expenseEntries.forEach(([cat, { allocation, realization }]) => {
-      const usage = allocation > 0 ? Math.round((realization / allocation) * 10000) / 100 : 0;
-      const status = getStatus(usage);
+    expenseEntries.forEach(([cat, { allocation, realization }], idx) => {
+      const isAlt = idx % 2 === 1;
+      const bgColor = isAlt ? ALT_ROW.replace('FF','') : WHITE.replace('FF','');
+      const usage = allocation > 0 ? realization / allocation : 0;
+      const isOver = usage > 1;
+      const usageFontColor = isOver ? RED_TEXT.replace('FF','') : BLACK.replace('FF','');
 
-      let statusColor = TEAL;
-      if (status === 'Over Budget') statusColor = RED;
-      else if (status === 'Warning') statusColor = YELLOW;
-      else if (status === 'Safe') statusColor = GREEN;
+      const row = ws.getRow(dataRow);
+      row.height = 15.75;
 
-      const rowRef = ws.getRow(dataRowNum);
-      rowRef.height = 24;
-
-      const catCell = ws.getCell(dataRowNum, 1);
+      // A: Category
+      const catCell = ws.getCell(dataRow, 1);
       catCell.value = cat;
-      catCell.font = { size: 10, color: { argb: WHITE } };
-      catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CARD_BG } };
-      catCell.alignment = { vertical: 'middle' };
+      catCell.font = { size: 9 };
+      catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      catCell.alignment = { vertical: "middle" };
       catCell.border = thinBorder;
 
-      const allocCell = ws.getCell(dataRowNum, 2);
+      // B: Allocation
+      const allocCell = ws.getCell(dataRow, 2);
       allocCell.value = allocation;
-      allocCell.font = { size: 10, color: { argb: WHITE } };
-      allocCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CARD_BG } };
-      allocCell.alignment = { horizontal: 'right', vertical: 'middle' };
+      allocCell.font = { size: 9, color: { argb: BLUE.replace('FF','') } };
+      allocCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      allocCell.alignment = { horizontal: 'right', vertical: "middle" };
       allocCell.border = thinBorder;
       allocCell.numFmt = rpFmt;
 
-      const realCell = ws.getCell(dataRowNum, 3);
+      // C: Realization
+      const realCell = ws.getCell(dataRow, 3);
       realCell.value = realization;
-      realCell.font = { size: 10, color: { argb: usage > 100 ? RED : WHITE } };
-      realCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: usage > 100 ? '2A0A0A' : CARD_BG } };
-      realCell.alignment = { horizontal: 'right', vertical: 'middle' };
+      realCell.font = { size: 9, color: { argb: BLUE.replace('FF','') } };
+      realCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      realCell.alignment = { horizontal: 'right', vertical: "middle" };
       realCell.border = thinBorder;
       realCell.numFmt = rpFmt;
 
-      const usageCell = ws.getCell(dataRowNum, 4);
-      usageCell.value = parseFloat(usage.toFixed(2));
-      usageCell.font = { bold: true, size: 10, color: { argb: statusColor } };
-      usageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CARD_BG } };
-      usageCell.alignment = { horizontal: 'right', vertical: 'middle' };
-      usageCell.border = thinBorder;
-      usageCell.numFmt = '0.00"%"';
+      // D: Budget Usage Progress (formula with percentage bar text)
+      const progCell = ws.getCell(dataRow, 4);
+      progCell.value = { formula: `IFERROR(C${dataRow}/B${dataRow},0)` };
+      progCell.font = { size: 9, color: { argb: LIGHT_GRAY.replace('FF','') } };
+      progCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      progCell.alignment = { horizontal: 'left', vertical: "middle" };
+      progCell.border = thinBorder;
+      progCell.numFmt = pctFmt;
 
-      dataRowNum++;
+      // E: % Usage (number, colored red if over budget)
+      const usageCell = ws.getCell(dataRow, 5);
+      usageCell.value = { formula: `IFERROR(C${dataRow}/B${dataRow},0)` };
+      usageCell.font = { size: 9, color: { argb: usageFontColor } };
+      usageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      usageCell.alignment = { horizontal: 'right', vertical: "middle" };
+      usageCell.border = thinBorder;
+      usageCell.numFmt = pctFmt;
+
+      dataRow++;
     });
 
-    // === CHARTS ===
-    const chartStartRow = dataRowNum + 2;
+    // TOTAL row
+    const totalRow = ws.getRow(dataRow);
+    totalRow.height = 18;
+    ['TOTAL', { formula: `SUM(B7:B${dataRow-1})` }, { formula: `SUM(C7:C${dataRow-1})` }, '', { formula: `IFERROR(C${dataRow}/B${dataRow},0)` }].forEach((val, i) => {
+      const cell = ws.getCell(dataRow, i + 1);
+      cell.value = val;
+      cell.font = { bold: true, size: 9 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_ROW.replace('FF','') } };
+      cell.alignment = { horizontal: i >= 1 ? 'right' : 'left', vertical: 'bottom' };
+      cell.border = thinBorder;
+      if (i >= 1 && i <= 2) cell.numFmt = rpFmt;
+      if (i === 4) cell.numFmt = pctFmt;
+    });
+
+    // Chart data rows (for line chart) - placed in G:H
+    ws.getCell('G1').value = 'Month';
+    ws.getCell('G1').font = { size: 11 };
+    ws.getCell('H1').value = 'Spending';
+    ws.getCell('H1').font = { size: 11 };
+
+    // Monthly spending data for chart
+    const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const sortedMonths = Object.keys(monthlyData).sort();
+    sortedMonths.forEach((m, i) => {
+      const [, mo] = m.split('-');
+      const row = i + 2;
+      ws.getCell(`G${row}`).value = monthLabels[parseInt(mo)-1];
+      ws.getCell(`H${row}`).value = monthlyData[m].keluar;
+      ws.getCell(`H${row}`).numFmt = rpFmt;
+    });
+
+    // Embed charts as images
+    const chartStartRow = dataRow + 2;
 
     if (doughnutRef.current) {
-      const doughnutCanvas = doughnutRef.current.canvas;
-      const doughnutImg = doughnutCanvas.toDataURL('image/png');
-      const doughnutBase64 = doughnutImg.split(',')[1];
-      const doughnutImageId = wb.addImage({ base64: doughnutBase64, extension: 'png' });
-      ws.addImage(doughnutImageId, {
-        tl: { col: 0, row: chartStartRow },
-        ext: { width: 350, height: 250 },
-      });
+      const canvas = doughnutRef.current.canvas;
+      const base64 = canvas.toDataURL('image/png').split(',')[1];
+      const imgId = wb.addImage({ base64, extension: 'png' });
+      ws.addImage(imgId, { tl: { col: 0, row: chartStartRow }, ext: { width: 350, height: 250 } });
     }
 
     if (barRef.current) {
-      const barCanvas = barRef.current.canvas;
-      const barImg = barCanvas.toDataURL('image/png');
-      const barBase64 = barImg.split(',')[1];
-      const barImageId = wb.addImage({ base64: barBase64, extension: 'png' });
-      ws.addImage(barImageId, {
-        tl: { col: 4, row: chartStartRow },
-        ext: { width: 450, height: 250 },
-      });
+      const canvas = barRef.current.canvas;
+      const base64 = canvas.toDataURL('image/png').split(',')[1];
+      const imgId = wb.addImage({ base64, extension: 'png' });
+      ws.addImage(imgId, { tl: { col: 3, row: chartStartRow }, ext: { width: 450, height: 250 } });
     }
 
-    // Sheet 2: Transactions
-    const wsTx = wb.addWorksheet('Transactions', {
-      properties: { tabColor: { argb: '6366F1' } },
+    // ========== SHEET 2: BUDGETING ==========
+    const wsBudget = wb.addWorksheet('Budgeting', { properties: { tabColor: { argb: '6366F1' } } });
+    wsBudget.columns = [{ width: 25 }, { width: 20 }, { width: 18 }, { width: 18 }];
+
+    wsBudget.mergeCells('A1:D1');
+    const budgetTitle = wsBudget.getCell('A1');
+    budgetTitle.value = 'Budgeting Sheet';
+    budgetTitle.font = { bold: true, size: 13, color: { argb: WHITE.replace('FF','') } };
+    budgetTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_DARK.replace('FF','') } };
+    budgetTitle.alignment = { horizontal: 'center', vertical: "middle" };
+    wsBudget.getRow(1).height = 24;
+
+    ['Category', 'Monthly Budget', 'YTD Spent', 'Remaining'].forEach((h, i) => {
+      const cell = wsBudget.getCell(2, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 9, color: { argb: WHITE.replace('FF','') } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL.replace('FF','') } };
+      cell.alignment = { horizontal: 'center', vertical: 'bottom' };
+      cell.border = thinBorder;
     });
-    wsTx.columns = [
-      { header: 'Date', width: 12 },
-      { header: 'Category', width: 16 },
-      { header: 'Description', width: 28 },
-      { header: 'Qty', width: 6 },
-      { header: 'Price', width: 14 },
-      { header: 'Total', width: 14 },
-      { header: 'Type', width: 8 },
+
+    expenseEntries.forEach(([cat, { allocation, realization }], idx) => {
+      const row = idx + 3;
+      wsBudget.getCell(row, 1).value = cat;
+      wsBudget.getCell(row, 1).font = { size: 11 };
+      wsBudget.getCell(row, 1).border = thinBorder;
+
+      wsBudget.getCell(row, 2).value = allocation;
+      wsBudget.getCell(row, 2).font = { size: 11, color: { argb: BLUE.replace('FF','') } };
+      wsBudget.getCell(row, 2).border = thinBorder;
+      wsBudget.getCell(row, 2).numFmt = rpFmt;
+
+      wsBudget.getCell(row, 3).value = realization;
+      wsBudget.getCell(row, 3).font = { size: 11, color: { argb: BLUE.replace('FF','') } };
+      wsBudget.getCell(row, 3).border = thinBorder;
+      wsBudget.getCell(row, 3).numFmt = rpFmt;
+
+      wsBudget.getCell(row, 4).value = { formula: `B${row}-C${row}` };
+      wsBudget.getCell(row, 4).font = { size: 11 };
+      wsBudget.getCell(row, 4).border = thinBorder;
+      wsBudget.getCell(row, 4).numFmt = rpFmt;
+    });
+
+    // ========== SHEET 3: SUMMARY ==========
+    const wsSummary = wb.addWorksheet('Summary', { properties: { tabColor: { argb: 'F59E0B' } } });
+    wsSummary.columns = [{ width: 30 }, { width: 20 }];
+
+    wsSummary.mergeCells('A1:B1');
+    const sumTitle = wsSummary.getCell('A1');
+    sumTitle.value = 'Monthly Summary';
+    sumTitle.font = { bold: true, size: 13, color: { argb: WHITE.replace('FF','') } };
+    sumTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_DARK.replace('FF','') } };
+    sumTitle.alignment = { horizontal: 'center', vertical: "middle" };
+    wsSummary.getRow(1).height = 24;
+
+    const summaryRows = [
+      ['Total Income', totalMasuk],
+      ['Total Savings', saldo > 0 ? saldo : 0],
+      ['Total Spending', totalKeluar],
+      ['Balance', saldo],
     ];
-    for (let c = 1; c <= 7; c++) {
-      const hCell = wsTx.getCell(1, c);
-      hCell.font = { bold: true, size: 10, color: { argb: WHITE } };
-      hCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
-      hCell.border = thinBorder;
-    }
-    filtered.forEach(t => {
-      wsTx.addRow([t.date, t.category, t.description, t.quantity, t.price, t.total, t.type]);
+    summaryRows.forEach(([label, val], i) => {
+      const row = i + 3;
+      wsSummary.getCell(row, 1).value = label;
+      wsSummary.getCell(row, 1).font = { size: 10 };
+      wsSummary.getCell(row, 1).border = thinBorder;
+
+      wsSummary.getCell(row, 2).value = val;
+      wsSummary.getCell(row, 2).font = { bold: true, size: 10 };
+      wsSummary.getCell(row, 2).alignment = { horizontal: 'right' };
+      wsSummary.getCell(row, 2).border = thinBorder;
+      wsSummary.getCell(row, 2).numFmt = rpFmt;
     });
+
+    // Savings Rate
+    wsSummary.getCell(7, 1).value = 'Savings Rate';
+    wsSummary.getCell(7, 1).font = { size: 10 };
+    wsSummary.getCell(7, 1).border = thinBorder;
+    wsSummary.getCell(7, 2).value = totalMasuk > 0 ? saldo / totalMasuk : 0;
+    wsSummary.getCell(7, 2).font = { size: 10 };
+    wsSummary.getCell(7, 2).alignment = { horizontal: 'right' };
+    wsSummary.getCell(7, 2).border = thinBorder;
+    wsSummary.getCell(7, 2).numFmt = '0.0%';
+
+    wsSummary.getCell(8, 1).value = 'Spending Rate';
+    wsSummary.getCell(8, 1).font = { size: 10 };
+    wsSummary.getCell(8, 1).border = thinBorder;
+    wsSummary.getCell(8, 2).value = totalMasuk > 0 ? totalKeluar / totalMasuk : 0;
+    wsSummary.getCell(8, 2).font = { size: 10 };
+    wsSummary.getCell(8, 2).alignment = { horizontal: 'right' };
+    wsSummary.getCell(8, 2).border = thinBorder;
+    wsSummary.getCell(8, 2).numFmt = '0.0%';
+
+    // ========== SHEET 4: SPENDING (Transactions) ==========
+    const wsTx = wb.addWorksheet('Spending', { properties: { tabColor: { argb: 'EF4444' } } });
+    wsTx.columns = [
+      { width: 14 }, { width: 18 }, { width: 28 }, { width: 16 },
+    ];
+
+    wsTx.mergeCells('A1:D1');
+    const txTitle = wsTx.getCell('A1');
+    txTitle.value = 'Daily Spending Log';
+    txTitle.font = { bold: true, size: 13, color: { argb: WHITE.replace('FF','') } };
+    txTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL_DARK.replace('FF','') } };
+    txTitle.alignment = { horizontal: 'center', vertical: "middle" };
+    wsTx.getRow(1).height = 24;
+
+    ['Date', 'Category', 'Description', 'Amount'].forEach((h, i) => {
+      const cell = wsTx.getCell(2, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 9, color: { argb: WHITE.replace('FF','') } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TEAL.replace('FF','') } };
+      cell.alignment = { horizontal: 'center', vertical: 'bottom' };
+      cell.border = thinBorder;
+    });
+
+    const keluarOnly = filtered.filter(t => t.type === 'keluar').sort((a, b) => a.date.localeCompare(b.date));
+    keluarOnly.forEach((t, idx) => {
+      const row = idx + 3;
+      wsTx.getCell(row, 1).value = t.date;
+      wsTx.getCell(row, 1).font = { size: 9 };
+      wsTx.getCell(row, 1).border = thinBorder;
+      wsTx.getCell(row, 1).numFmt = 'yyyy-mm-dd';
+
+      wsTx.getCell(row, 2).value = t.category;
+      wsTx.getCell(row, 2).font = { size: 9 };
+      wsTx.getCell(row, 2).border = thinBorder;
+
+      wsTx.getCell(row, 3).value = t.description;
+      wsTx.getCell(row, 3).font = { size: 9 };
+      wsTx.getCell(row, 3).border = thinBorder;
+
+      wsTx.getCell(row, 4).value = t.total;
+      wsTx.getCell(row, 4).font = { size: 9 };
+      wsTx.getCell(row, 4).alignment = { horizontal: 'right' };
+      wsTx.getCell(row, 4).border = thinBorder;
+      wsTx.getCell(row, 4).numFmt = rpFmt;
+    });
+
+    // TOTAL row
+    const txTotalRow = keluarOnly.length + 3;
+    wsTx.getCell(txTotalRow, 3).value = 'TOTAL';
+    wsTx.getCell(txTotalRow, 3).font = { bold: true, size: 9 };
+    wsTx.getCell(txTotalRow, 4).value = { formula: `SUM(D3:D${txTotalRow - 1})` };
+    wsTx.getCell(txTotalRow, 4).font = { bold: true, size: 9 };
+    wsTx.getCell(txTotalRow, 4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_ROW.replace('FF','') } };
+    wsTx.getCell(txTotalRow, 4).alignment = { horizontal: 'right' };
+    wsTx.getCell(txTotalRow, 4).numFmt = rpFmt;
 
     // Download
     const buffer = await wb.xlsx.writeBuffer();
