@@ -1,17 +1,20 @@
 import type { Transaction, Period, DateRange } from './types';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  'https://heuqbytnhgidaqzcxcry.supabase.co',
-  'sb_publishable_mJ9SScZw_pAlPtJL67BjUw_U6k1knur'
-);
+function getClient(userId?: string) {
+  return createClient(
+    'https://heuqbytnhgidaqzcxcry.supabase.co',
+    'sb_publishable_mJ9SScZw_pAlPtJL67BjUw_U6k1knur',
+    userId ? { global: { headers: { 'x-user-id': userId } } } : undefined
+  );
+}
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 export async function loadTransactions(userId: string): Promise<Transaction[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getClient(userId)
     .from('transactions')
     .select('*')
     .eq('user_id', userId)
@@ -35,7 +38,7 @@ export async function loadTransactions(userId: string): Promise<Transaction[]> {
 }
 
 export async function addTransaction(userId: string, t: Transaction): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await getClient(userId)
     .from('transactions')
     .insert({
       id: t.id,
@@ -57,7 +60,7 @@ export async function addTransaction(userId: string, t: Transaction): Promise<bo
 }
 
 export async function updateTransaction(userId: string, t: Transaction): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await getClient(userId)
     .from('transactions')
     .update({
       date: t.date,
@@ -79,7 +82,7 @@ export async function updateTransaction(userId: string, t: Transaction): Promise
 }
 
 export async function deleteTransaction(userId: string, id: string): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await getClient(userId)
     .from('transactions')
     .delete()
     .eq('id', id)
