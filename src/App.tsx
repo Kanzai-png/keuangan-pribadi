@@ -117,7 +117,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="clerk-container">
+            <div className="clerk-container w-full flex flex-col items-center">
               {authMode === 'login' ? (
                 <SignIn appearance={{
                   elements: {
