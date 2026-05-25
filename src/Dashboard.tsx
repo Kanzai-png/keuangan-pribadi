@@ -161,14 +161,16 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         <h2 className="text-base font-semibold mb-4">{editId ? 'Edit Transaksi' : 'Tambah Transaksi'}</h2>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Tanggal</label>
-            <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            <label htmlFor="field-date" className="block text-xs text-gray-400 mb-1">Tanggal</label>
+            <input id="field-date" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              aria-required="true"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <div className="relative">
-            <label className="block text-xs text-gray-400 mb-1">Kategori</label>
-            <input type="text" value={form.category} onChange={e => { setForm(f => ({ ...f, category: e.target.value })); setShowCatSuggestions(true); }}
+            <label htmlFor="field-category" className="block text-xs text-gray-400 mb-1">Kategori</label>
+            <input id="field-category" type="text" value={form.category} onChange={e => { setForm(f => ({ ...f, category: e.target.value })); setShowCatSuggestions(true); }}
               onFocus={() => setShowCatSuggestions(true)} onBlur={() => setTimeout(() => setShowCatSuggestions(false), 150)}
+              aria-required="true" aria-autocomplete="list" role="combobox" aria-expanded={showCatSuggestions && filteredCats.length > 0}
               placeholder="Makan, Transport..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
             {showCatSuggestions && filteredCats.length > 0 && (
               <div className="absolute z-20 top-full mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-32 overflow-y-auto">
@@ -182,26 +184,30 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             )}
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Deskripsi</label>
-            <input type="text" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            <label htmlFor="field-description" className="block text-xs text-gray-400 mb-1">Deskripsi</label>
+            <input id="field-description" type="text" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              aria-required="true"
               placeholder="Detail transaksi" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Tipe</label>
-            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as 'masuk' | 'keluar' }))}
+            <label htmlFor="field-type" className="block text-xs text-gray-400 mb-1">Tipe</label>
+            <select id="field-type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as 'masuk' | 'keluar' }))}
+              aria-required="true"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500">
               <option value="keluar">Keluar</option>
               <option value="masuk">Masuk</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Qty</label>
-            <input type="number" min="1" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+            <label htmlFor="field-qty" className="block text-xs text-gray-400 mb-1">Qty</label>
+            <input id="field-qty" type="number" min="1" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+              aria-required="true"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Harga Satuan</label>
-            <input type="number" min="0" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseInt(e.target.value) || 0 }))}
+            <label htmlFor="field-price" className="block text-xs text-gray-400 mb-1">Harga Satuan</label>
+            <input id="field-price" type="number" min="0" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseInt(e.target.value) || 0 }))}
+              aria-required="true"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <div className="flex items-end">
@@ -227,7 +233,7 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
         <div className="px-4 py-3 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-200">Riwayat Transaksi ({filtered.length})</h3>
           <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            placeholder="Cari kategori/deskripsi..." className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500 w-full sm:w-56" />
+            aria-label="Cari transaksi" placeholder="Cari kategori/deskripsi..." className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500 w-full sm:w-56" />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
