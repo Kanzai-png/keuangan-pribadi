@@ -7,7 +7,7 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale,
   BarElement, ArcElement, Title, Tooltip, Legend
 } from 'chart.js';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Pie } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
@@ -26,7 +26,7 @@ interface ReportProps {
 
 export default function Report({ transactions, period, customRange, setPeriod, setCustomRange, notify }: ReportProps) {
   const barRef = useRef<ChartJS<'bar'>>(null);
-  const doughnutRef = useRef<ChartJS<'doughnut'>>(null);
+  const doughnutRef = useRef<ChartJS<'pie'>>(null);
 
   const filtered = useMemo(() => filterByPeriod(transactions, period, customRange), [transactions, period, customRange]);
   const totalMasuk = filtered.filter(t => t.type === 'masuk').reduce((s, t) => s + t.total, 0);
@@ -545,7 +545,7 @@ export default function Report({ transactions, period, customRange, setPeriod, s
           <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
           <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[280px]">
             {doughnutLabels.length > 0 ? (
-              <Doughnut ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
+              <Pie ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
             ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
           </div>
         </div>
