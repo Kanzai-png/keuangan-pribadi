@@ -95,6 +95,20 @@ export async function deleteTransaction(userId: string, id: string): Promise<boo
   return true;
 }
 
+// Budget helpers (localStorage per user)
+import type { Budget } from './types';
+
+export function loadBudgets(userId: string): Budget[] {
+  try {
+    const raw = localStorage.getItem(`budgets_${userId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveBudgets(userId: string, budgets: Budget[]): void {
+  localStorage.setItem(`budgets_${userId}`, JSON.stringify(budgets));
+}
+
 // Period filter (client-side)
 export function filterByPeriod(transactions: Transaction[], period: Period, customRange?: DateRange): Transaction[] {
   const now = new Date();

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser, useClerk, SignIn, SignUp } from '@clerk/clerk-react';
-import type { Transaction, Period, DateRange } from './types';
-import { loadTransactions, addTransaction, updateTransaction, deleteTransaction, generateId } from './storage';
+import type { Transaction, Period, DateRange, Budget } from './types';
+import { loadTransactions, addTransaction, updateTransaction, deleteTransaction, generateId, loadBudgets, saveBudgets } from './storage';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import Report from './Report';
@@ -17,6 +17,7 @@ export default function App() {
   const { isSignedIn, user, isLoaded } = useUser();
   const { signOut } = useClerk();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [period, setPeriod] = useState<Period>('all');
   const [customRange, setCustomRange] = useState<DateRange>({ start: '', end: '' });
   const [activePage, setActivePage] = useState<'dashboard' | 'report' | 'account'>('dashboard');
@@ -38,6 +39,7 @@ export default function App() {
         setTransactions(data);
         setLoading(false);
       });
+      setBudgets(loadBudgets(user.id));
     }
   }, [isSignedIn, user]);
 
@@ -72,6 +74,12 @@ export default function App() {
     } else {
       notify('error', 'Gagal hapus transaksi');
     }
+  }
+
+  function handleBudgetUpdate(newBudgets: Budget[]) {
+    if (!user) return;
+    setBudgets(newBudgets);
+    saveBudgets(user.id, newBudgets);
   }
 
   async function handleLogout() {
@@ -223,6 +231,8 @@ export default function App() {
               onAdd={handleAdd}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              budgets={budgets}
+              onBudgetUpdate={handleBudgetUpdate}
               notify={notify}
             />
           ) : activePage === 'report' ? (

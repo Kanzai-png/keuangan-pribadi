@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { Transaction, Period, DateRange } from './types';
+import type { Transaction, Period, DateRange, Budget } from './types';
 import { filterByPeriod, generateId } from './storage';
 
 function formatRp(n: number) {
@@ -15,10 +15,12 @@ interface DashboardProps {
   onAdd: (t: Transaction) => void;
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
+  budgets: Budget[];
+  onBudgetUpdate: (budgets: Budget[]) => void;
   notify: (type: 'success' | 'error' | 'warning', msg: string) => void;
 }
 
-export default function Dashboard({ transactions, period, customRange, setPeriod, setCustomRange, onAdd, onEdit, onDelete, notify }: DashboardProps) {
+export default function Dashboard({ transactions, period, customRange, setPeriod, setCustomRange, onAdd, onEdit, onDelete, budgets, onBudgetUpdate, notify }: DashboardProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,12 +58,20 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
     { key: 'all', label: 'Semua' },
   ];
 
+  const [priceZeroConfirmed, setPriceZeroConfirmed] = useState(false);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.category || !form.description || form.price <= 0) {
+    if (!form.category || !form.description) {
       notify('warning', 'Lengkapi semua field');
       return;
     }
+    if (form.price === 0 && !priceZeroConfirmed) {
+      notify('warning', 'Harga Rp0 — yakin ini bukan kesalahan input? Klik Tambah lagi untuk konfirmasi.');
+      setPriceZeroConfirmed(true);
+      return;
+    }
+    setPriceZeroConfirmed(false);
     const total = form.quantity * form.price;
     if (editId) {
       onEdit({ id: editId, ...form, total });
@@ -142,6 +152,9 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
       )}
+
+      {/* Budget Tracker */}
+      <BudgetSection budgets={budgets} onBudgetUpdate={onBudgetUpdate} filtered={filtered} existingCategories={existingCategories} notify={notify} />
 
       {/* Form */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6">
@@ -242,10 +255,17 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
                 if (searched.length === 0) {
                   return (
                     <tr><td colSpan={8} className="px-4 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <svg className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                        <p className="text-sm text-gray-500">{searchQuery ? 'Tidak ditemukan' : 'Belum ada transaksi'}</p>
-                        {!searchQuery && <p className="text-xs text-gray-600">Tambah transaksi pertama kamu di form atas</p>}
+                      <div className="flex flex-col items-center gap-3">
+                        <svg className="w-12 h-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        {searchQuery ? (
+                          <p className="text-sm text-gray-500">Tidak ditemukan untuk "{searchQuery}"</p>
+                        ) : (
+                          <>
+                            <p className="text-base font-medium text-gray-400">Mulai catat keuanganmu</p>
+                            <p className="text-sm text-gray-500 max-w-xs">Isi form di atas untuk menambah transaksi pertama. Pilih kategori, masukkan deskripsi dan harga — selesai.</p>
+                            <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="mt-2 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-sm font-medium text-white">Tambah Transaksi Pertama</button>
+                          </>
+                        )}
                       </div>
                     </td></tr>
                   );
@@ -292,6 +312,119 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Budget Section Component
+function BudgetSection({ budgets, onBudgetUpdate, filtered, existingCategories, notify }: {
+  budgets: Budget[];
+  onBudgetUpdate: (b: Budget[]) => void;
+  filtered: Transaction[];
+  existingCategories: string[];
+  notify: (type: 'success' | 'error' | 'warning', msg: string) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [newCat, setNewCat] = useState('');
+  const [newAmount, setNewAmount] = useState(0);
+
+  const spentByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    filtered.filter(t => t.type === 'keluar').forEach(t => {
+      map[t.category] = (map[t.category] || 0) + t.total;
+    });
+    return map;
+  }, [filtered]);
+
+  function addBudget() {
+    if (!newCat || newAmount <= 0) {
+      notify('warning', 'Isi kategori dan jumlah budget');
+      return;
+    }
+    if (budgets.find(b => b.category === newCat)) {
+      notify('warning', 'Budget untuk kategori ini sudah ada');
+      return;
+    }
+    onBudgetUpdate([...budgets, { category: newCat, allocation: newAmount }]);
+    setNewCat('');
+    setNewAmount(0);
+    setShowForm(false);
+    notify('success', 'Budget ditambahkan');
+  }
+
+  function removeBudget(cat: string) {
+    onBudgetUpdate(budgets.filter(b => b.category !== cat));
+  }
+
+  if (budgets.length === 0 && !showForm) {
+    return (
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium text-gray-300">Budget per Kategori</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Set target pengeluaran untuk kontrol keuangan</p>
+          </div>
+          <button onClick={() => setShowForm(true)} className="px-3 py-1.5 text-xs rounded-lg bg-teal-600 hover:bg-teal-500 font-medium">Set Budget</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-300">Budget per Kategori</h3>
+        <button onClick={() => setShowForm(!showForm)} className="px-2.5 py-1 text-xs rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700">
+          {showForm ? 'Batal' : '+ Tambah'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="flex flex-wrap gap-2 items-end bg-gray-800/50 rounded-lg p-3">
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs text-gray-400 mb-1">Kategori</label>
+            <select value={newCat} onChange={e => setNewCat(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500">
+              <option value="">Pilih...</option>
+              {existingCategories.filter(c => !budgets.find(b => b.category === c)).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-32">
+            <label className="block text-xs text-gray-400 mb-1">Budget (Rp)</label>
+            <input type="number" min="0" value={newAmount} onChange={e => setNewAmount(parseInt(e.target.value) || 0)}
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <button onClick={addBudget} className="px-3 py-1.5 text-xs rounded-lg bg-teal-600 hover:bg-teal-500 font-medium">Simpan</button>
+        </div>
+      )}
+
+      {budgets.map(b => {
+        const spent = spentByCategory[b.category] || 0;
+        const pct = Math.min((spent / b.allocation) * 100, 100);
+        const over = spent > b.allocation;
+        const near = pct >= 80 && !over;
+        return (
+          <div key={b.category} className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-300 font-medium">{b.category}</span>
+              <div className="flex items-center gap-2">
+                <span className={`${over ? 'text-red-400' : near ? 'text-yellow-400' : 'text-gray-400'}`}>
+                  {formatRp(spent)} / {formatRp(b.allocation)}
+                </span>
+                <button onClick={() => removeBudget(b.category)} className="text-gray-600 hover:text-red-400 text-xs">x</button>
+              </div>
+            </div>
+            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-300 ${over ? 'bg-red-500' : near ? 'bg-yellow-500' : 'bg-teal-500'}`}
+                style={{ width: `${pct}%` }} />
+            </div>
+            {over && <p className="text-xs text-red-400">Melebihi budget {formatRp(spent - b.allocation)}</p>}
+            {near && <p className="text-xs text-yellow-400">Hampir mencapai limit ({pct.toFixed(0)}%)</p>}
+          </div>
+        );
+      })}
     </div>
   );
 }
