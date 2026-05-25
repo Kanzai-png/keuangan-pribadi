@@ -1,16 +1,12 @@
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod } from './storage';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
-  Chart as ChartJS, CategoryScale, LinearScale,
-  BarElement, ArcElement, Title, Tooltip, Legend
-} from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend, ChartDataLabels);
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+  Legend as RLegend, ResponsiveContainer, PieChart, Pie as RPie, Cell
+} from 'recharts';
 
 function formatRp(n: number) {
   return 'Rp' + n.toLocaleString('id-ID');
@@ -26,8 +22,6 @@ interface ReportProps {
 }
 
 export default function Report({ transactions, period, customRange, setPeriod, setCustomRange, notify }: ReportProps) {
-  const barRef = useRef<ChartJS<'bar'>>(null);
-  const doughnutRef = useRef<ChartJS<'pie'>>(null);
 
   const filtered = useMemo(() => filterByPeriod(transactions, period, customRange), [transactions, period, customRange]);
   const totalMasuk = filtered.filter(t => t.type === 'masuk').reduce((s, t) => s + t.total, 0);
@@ -84,20 +78,19 @@ export default function Report({ transactions, period, customRange, setPeriod, s
 
   const sortedMonths = Object.keys(monthlyData).sort();
   const monthLabels = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  const barData = {
-    labels: sortedMonths.map(m => { const [, mo] = m.split('-'); return monthLabels[parseInt(mo)-1]; }),
-    datasets: [
-      { label: 'Masuk', data: sortedMonths.map(m => monthlyData[m].masuk), backgroundColor: 'rgba(20, 184, 166, 0.8)', borderColor: '#14b8a6', borderWidth: 2, borderRadius: 8, borderSkipped: false as const },
-      { label: 'Keluar', data: sortedMonths.map(m => monthlyData[m].keluar), backgroundColor: 'rgba(239, 68, 68, 0.8)', borderColor: '#ef4444', borderWidth: 2, borderRadius: 8, borderSkipped: false as const },
-    ],
-  };
 
-  const doughnutLabels = Object.keys(categoryData);
-  const colors = ['#14b8a6','#f59e0b','#ef4444','#6366f1','#06b6d4','#ec4899','#8b5cf6','#22c55e','#f97316','#a855f7'];
-  const doughnutData = {
-    labels: doughnutLabels,
-    datasets: [{ data: doughnutLabels.map(l => categoryData[l]), backgroundColor: colors.slice(0, doughnutLabels.length), borderWidth: 0, hoverOffset: 8 }],
-  };
+  // Recharts data format
+  const barChartData = sortedMonths.map(m => {
+    const [, mo] = m.split('-');
+    return {
+      name: monthLabels[parseInt(mo) - 1],
+      masuk: monthlyData[m].masuk,
+      keluar: monthlyData[m].keluar,
+    };
+  });
+
+  const pieChartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
+  const COLORS = ['#14b8a6','#f59e0b','#ef4444','#6366f1','#06b6d4','#ec4899','#8b5cf6','#22c55e','#f97316','#a855f7'];
 
   async function handleExportXLSX() {
     const wb = new ExcelJS.Workbook();
@@ -286,16 +279,7 @@ export default function Report({ transactions, period, customRange, setPeriod, s
       ws.getCell(`H${row}`).numFmt = rpFmt;
     });
 
-    // Chart images
-    const chartStartRow = dataRow + 2;
-    if (doughnutRef.current) {
-      const base64 = doughnutRef.current.canvas.toDataURL('image/png').split(',')[1];
-      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 0, row: chartStartRow }, ext: { width: 220, height: 180 } });
-    }
-    if (barRef.current) {
-      const base64 = barRef.current.canvas.toDataURL('image/png').split(',')[1];
-      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 3, row: chartStartRow }, ext: { width: 280, height: 180 } });
-    }
+    // Chart images skipped (Recharts is SVG-based, no canvas export)
 
     // ========== SHEET 2: BUDGETING ==========
     const wsBudget = wb.addWorksheet('Budgeting', { properties: { tabColor: { argb: '6366F1' } } });
@@ -536,17 +520,66 @@ export default function Report({ transactions, period, customRange, setPeriod, s
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
-          <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[280px]">
-            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, plugins: { legend: { labels: { color: '#9ca3af', usePointStyle: true, pointStyle: 'circle', padding: 16, font: { size: 12 } } }, datalabels: { anchor: 'end', align: 'end', color: '#e5e7eb', font: { size: 9, weight: 'bold' as const }, formatter: (val: number) => { if (val >= 1000000) return 'Rp' + (val / 1000000).toFixed(1) + 'jt'; if (val >= 1000) return 'Rp' + (val / 1000).toFixed(0) + 'rb'; return 'Rp' + val; } } }, scales: { x: { ticks: { color: '#9ca3af', font: { size: 11 } }, grid: { display: false } }, y: { ticks: { color: '#6b7280', font: { size: 10 }, callback: function(val: number | string) { const v = Number(val); if (v >= 1000000) return (v/1000000).toFixed(0) + 'jt'; if (v >= 1000) return (v/1000).toFixed(0) + 'rb'; return String(v); } }, grid: { color: 'rgba(55, 65, 81, 0.4)' }, border: { dash: [4, 4] } } } }} />
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Monthly Expense Trend</h3>
+          <div className="h-[240px] sm:h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barChartData} barCategoryGap="20%" barGap={4}>
+                <defs>
+                  <linearGradient id="gradMasuk" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#0d9488" stopOpacity={0.6} />
+                  </linearGradient>
+                  <linearGradient id="gradKeluar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#dc2626" stopOpacity={0.6} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(55,65,81,0.4)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000000 ? (v/1000000).toFixed(0)+'jt' : v >= 1000 ? (v/1000).toFixed(0)+'rb' : String(v)} />
+                <RTooltip
+                  contentStyle={{ backgroundColor: 'rgba(17,24,39,0.95)', border: '1px solid rgba(55,65,81,0.6)', borderRadius: 12, backdropFilter: 'blur(8px)', padding: '12px 16px' }}
+                  labelStyle={{ color: '#e5e7eb', fontWeight: 600, marginBottom: 4 }}
+                  itemStyle={{ color: '#d1d5db', fontSize: 12 }}
+                  formatter={(value: any) => [formatRp(Number(value)), '']}
+                  cursor={{ fill: 'rgba(55,65,81,0.2)' }}
+                />
+                <RLegend iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span style={{ color: '#9ca3af', fontSize: 12 }}>{value === 'masuk' ? 'Masuk' : 'Keluar'}</span>} />
+                <Bar dataKey="masuk" fill="url(#gradMasuk)" radius={[6, 6, 0, 0]} maxBarSize={32} />
+                <Bar dataKey="keluar" fill="url(#gradKeluar)" radius={[6, 6, 0, 0]} maxBarSize={32} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
-          <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[280px]">
-            {doughnutLabels.length > 0 ? (
-              <Pie ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12, padding: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } }, datalabels: { color: '#ffffff', font: { size: 10, weight: 'bold' as const }, formatter: (val: number, ctx: any) => { const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0); const pct = ((val / total) * 100).toFixed(1); return pct + '%'; }, anchor: 'center', align: 'center' } } }} />
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Expense by Category</h3>
+          <div className="h-[240px] sm:h-[300px]">
+            {pieChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <RPie
+                    data={pieChartData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius="45%"
+                    outerRadius="75%"
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
+                    label={(({ name, percent }: any) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`) as any}
+                    labelLine={{ stroke: '#6b7280', strokeWidth: 1 }}
+                  >
+                    {pieChartData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </RPie>
+                  <RTooltip
+                    contentStyle={{ backgroundColor: 'rgba(17,24,39,0.95)', border: '1px solid rgba(55,65,81,0.6)', borderRadius: 12, backdropFilter: 'blur(8px)', padding: '12px 16px' }}
+                    formatter={(value: any) => [formatRp(Number(value)), '']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
           </div>
         </div>
