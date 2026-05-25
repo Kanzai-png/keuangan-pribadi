@@ -22,8 +22,8 @@ export default function Sidebar({ activePage, setActivePage, isOpen, setIsOpen }
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 transform transition-transform duration-200 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-5 border-b border-gray-800">
-          <h1 className="text-lg font-bold text-white">KENZAI AGENT</h1>
-          <p className="text-xs text-gray-500 mt-0.5">powered by NATA</p>
+          <h1 className="text-lg font-bold text-white">LAPORAN CATATAN KEUANGAN</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Powered by Nata Capital</p>
         </div>
         <nav className="p-3 space-y-1">
           {nav.map(item => (
