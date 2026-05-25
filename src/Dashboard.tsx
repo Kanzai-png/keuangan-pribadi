@@ -1,14 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Transaction, Period, DateRange } from './types';
 import { filterByPeriod, generateId } from './storage';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale,
-  BarElement, ArcElement, Title, Tooltip, Legend
-} from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend, ChartDataLabels);
 
 function formatRp(n: number) {
   return 'Rp' + n.toLocaleString('id-ID');
@@ -46,42 +38,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
   const totalKeluar = filtered.filter(t => t.type === 'keluar').reduce((s, t) => s + t.total, 0);
   const saldo = totalMasuk - totalKeluar;
   const totalItems = filtered.reduce((s, t) => s + t.quantity, 0);
-
-  // Chart data
-  const categoryData = useMemo(() => {
-    const cats: Record<string, number> = {};
-    filtered.filter(t => t.type === 'keluar').forEach(t => {
-      cats[t.category] = (cats[t.category] || 0) + t.total;
-    });
-    return cats;
-  }, [filtered]);
-
-  const monthlyData = useMemo(() => {
-    const months: Record<string, { masuk: number; keluar: number }> = {};
-    filtered.forEach(t => {
-      const m = t.date.slice(0, 7);
-      if (!months[m]) months[m] = { masuk: 0, keluar: 0 };
-      months[m][t.type] += t.total;
-    });
-    return months;
-  }, [filtered]);
-
-  const sortedMonths = Object.keys(monthlyData).sort();
-  const monthLabels = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  const barData = {
-    labels: sortedMonths.map(m => { const [, mo] = m.split('-'); return monthLabels[parseInt(mo)-1]; }),
-    datasets: [
-      { label: 'Masuk', data: sortedMonths.map(m => monthlyData[m].masuk), backgroundColor: 'rgba(20, 184, 166, 0.8)', borderColor: '#14b8a6', borderWidth: 2, borderRadius: 8, borderSkipped: false as const },
-      { label: 'Keluar', data: sortedMonths.map(m => monthlyData[m].keluar), backgroundColor: 'rgba(239, 68, 68, 0.8)', borderColor: '#ef4444', borderWidth: 2, borderRadius: 8, borderSkipped: false as const },
-    ],
-  };
-
-  const doughnutLabels = Object.keys(categoryData);
-  const colors = ['#14b8a6','#f59e0b','#ef4444','#6366f1','#06b6d4','#ec4899','#8b5cf6','#22c55e','#f97316','#a855f7'];
-  const pieData = {
-    labels: doughnutLabels,
-    datasets: [{ data: doughnutLabels.map(l => categoryData[l]), backgroundColor: colors.slice(0, doughnutLabels.length), borderWidth: 0, hoverOffset: 8 }],
-  };
 
   // Extract unique categories for autocomplete
   const existingCategories = useMemo(() => {
@@ -186,26 +142,6 @@ export default function Dashboard({ transactions, period, customRange, setPeriod
             className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
       )}
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Pemasukan vs Pengeluaran</h3>
-          <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[260px]">
-            {sortedMonths.length > 0 ? (
-              <Bar data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, plugins: { legend: { labels: { color: '#9ca3af', usePointStyle: true, pointStyle: 'circle', padding: 16, font: { size: 11 } } }, datalabels: { anchor: 'end', align: 'end', color: '#e5e7eb', font: { size: 9, weight: 'bold' as const }, formatter: (val: number) => { if (val >= 1000000) return (val / 1000000).toFixed(1) + 'jt'; if (val >= 1000) return (val / 1000).toFixed(0) + 'rb'; return String(val); } } }, scales: { x: { ticks: { color: '#9ca3af', font: { size: 11 } }, grid: { display: false } }, y: { ticks: { color: '#6b7280', font: { size: 10 }, callback: function(val: number | string) { const v = Number(val); if (v >= 1000000) return (v/1000000).toFixed(0) + 'jt'; if (v >= 1000) return (v/1000).toFixed(0) + 'rb'; return String(v); } }, grid: { color: 'rgba(55, 65, 81, 0.4)' }, border: { dash: [4, 4] } } } }} />
-            ) : <p className="text-gray-500 text-sm text-center py-8">Belum ada data</p>}
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Kategori Pengeluaran</h3>
-          <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[260px]">
-            {doughnutLabels.length > 0 ? (
-              <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12, padding: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } }, datalabels: { color: '#ffffff', font: { size: 10, weight: 'bold' as const }, formatter: (val: number, ctx: any) => { const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0); return ((val / total) * 100).toFixed(1) + '%'; }, anchor: 'center', align: 'center' } } }} />
-            ) : <p className="text-gray-500 text-sm text-center py-8">Belum ada pengeluaran</p>}
-          </div>
-        </div>
-      </div>
 
       {/* Form */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6">
