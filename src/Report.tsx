@@ -290,11 +290,11 @@ export default function Report({ transactions, period, customRange, setPeriod, s
     const chartStartRow = dataRow + 2;
     if (doughnutRef.current) {
       const base64 = doughnutRef.current.canvas.toDataURL('image/png').split(',')[1];
-      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 0, row: chartStartRow }, ext: { width: 350, height: 250 } });
+      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 0, row: chartStartRow }, ext: { width: 220, height: 180 } });
     }
     if (barRef.current) {
       const base64 = barRef.current.canvas.toDataURL('image/png').split(',')[1];
-      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 3, row: chartStartRow }, ext: { width: 450, height: 250 } });
+      ws.addImage(wb.addImage({ base64, extension: 'png' }), { tl: { col: 3, row: chartStartRow }, ext: { width: 280, height: 180 } });
     }
 
     // ========== SHEET 2: BUDGETING ==========
