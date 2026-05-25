@@ -8,8 +8,9 @@ import {
   BarElement, ArcElement, Title, Tooltip, Legend
 } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend, ChartDataLabels);
 
 function formatRp(n: number) {
   return 'Rp' + n.toLocaleString('id-ID');
@@ -538,14 +539,14 @@ export default function Report({ transactions, period, customRange, setPeriod, s
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Monthly Expense Trend</h3>
           <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[280px]">
-            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
+            <Bar ref={barRef} data={barData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { labels: { color: '#9ca3af' } }, datalabels: { anchor: 'end', align: 'end', color: '#e5e7eb', font: { size: 9, weight: 'bold' as const }, formatter: (val: number) => { if (val >= 1000000) return 'Rp' + (val / 1000000).toFixed(1) + 'jt'; if (val >= 1000) return 'Rp' + (val / 1000).toFixed(0) + 'rb'; return 'Rp' + val; } } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-sm font-medium text-gray-300 mb-3">Expense Realization %</h3>
           <div style={{ minHeight: 200, position: "relative" as const }} className="h-[200px] sm:h-[280px]">
             {doughnutLabels.length > 0 ? (
-              <Pie ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } } } }} />
+              <Pie ref={doughnutRef} data={doughnutData} options={{ responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', boxWidth: 12 } }, datalabels: { display: false } } }} />
             ) : <p className="text-gray-500 text-sm">Belum ada data pengeluaran</p>}
           </div>
         </div>
