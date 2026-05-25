@@ -554,21 +554,21 @@ export default function Report({ transactions, period, customRange, setPeriod, s
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <h3 className="text-sm font-medium text-gray-300 mb-4">Expense by Category</h3>
-          <div className="h-[240px] sm:h-[300px]">
+          <div className="h-[300px] sm:h-[340px]">
             {pieChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <RPie
                     data={pieChartData}
                     cx="50%"
-                    cy="45%"
-                    innerRadius="45%"
-                    outerRadius="75%"
+                    cy="40%"
+                    innerRadius="40%"
+                    outerRadius="65%"
                     paddingAngle={3}
                     dataKey="value"
                     stroke="none"
-                    label={(({ name, percent }: any) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`) as any}
-                    labelLine={{ stroke: '#6b7280', strokeWidth: 1 }}
+                    label={(({ percent }: any) => `${((percent || 0) * 100).toFixed(0)}%`) as any}
+                    labelLine={false}
                   >
                     {pieChartData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -576,7 +576,16 @@ export default function Report({ transactions, period, customRange, setPeriod, s
                   </RPie>
                   <RTooltip
                     contentStyle={{ backgroundColor: 'rgba(17,24,39,0.95)', border: '1px solid rgba(55,65,81,0.6)', borderRadius: 12, backdropFilter: 'blur(8px)', padding: '12px 16px' }}
-                    formatter={(value: any) => [formatRp(Number(value)), '']}
+                    formatter={(value: any, name: any) => [formatRp(Number(value)), name]}
+                  />
+                  <RLegend
+                    layout="horizontal"
+                    verticalAlign="bottom"
+                    align="center"
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ paddingTop: 16, fontSize: 11 }}
+                    formatter={(value: string) => <span style={{ color: '#9ca3af', fontSize: 11 }}>{value}</span>}
                   />
                 </PieChart>
               </ResponsiveContainer>
